@@ -371,7 +371,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v9</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v10</div>
     </div>
   </section>
 
@@ -565,12 +565,7 @@ const ACOLORS=['#2563EB','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#EF4
 const DEC={COP:0,ARS:0,USD:2,EUR:2,MXN:2,PEN:2};
 const SYM={COP:'$',ARS:'$',USD:'$',EUR:'€',MXN:'$',PEN:'S/'};
 
-let DB={mov:[],cfg:{cur:'COP',budget:0,theme:'noir',
-  accounts:[{id:'a1',name:'Bancolombia',balance:0,color:0,pockets:[]},
-            {id:'a2',name:'Efectivo',balance:0,color:2,pockets:[
-              {id:'p1',name:'Comida',balance:0},{id:'p2',name:'Mi dinero',balance:0}]}],
-  cards:[{id:'c1',name:'Black BBVA',limit:0,g:0},{id:'c2',name:'Gold Nu',limit:0,g:1}],
-  plans:{}}};
+let DB={mov:[],cfg:{cur:'COP',budget:0,theme:'noir',accounts:[],cards:[],plans:{},totals_v5:1}};
 let cursor=new Date();cursor.setDate(1);
 let pcur=new Date();pcur.setDate(1);
 let d={t:'out',amt:'',acc:null,sub:null,dst:null,owner:null,cat:null,ownerOpen:false};
@@ -720,9 +715,20 @@ const monthMov=()=>DB.mov.filter(inMonth).sort((a,b)=>b.ts-a.ts);
 function render(){
   const B=balances(),mv=monthMov();
   $('total').innerHTML='<small>'+SYM[DB.cfg.cur]+'</small>'+fmt(B.total);
+  $('cardpill').style.display=DB.cfg.cards.length?'inline-flex':'none';
   $('cardpill').innerHTML=`<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--expense);stroke-width:1.8;fill:none"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/></svg>
     Tarjetas <b>${money(B.cardTotal)}</b><span class="ch">›</span>`;
 
+  if(!DB.cfg.accounts.length){
+    $('accts').innerHTML=`<div class="acc" style="padding:22px 18px;text-align:center">
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">Bienvenido a Bolsillo</div>
+      <div style="font-size:13.5px;color:var(--text-dim);line-height:1.55;margin-bottom:16px">
+        Empieza creando tu primera cuenta: el banco donde te cae la nómina, o tu efectivo.
+        Después le agregas bolsillos y tarjetas si las usas.</div>
+      <button id="firstacc" style="width:100%;padding:13px;border-radius:13px;font-size:13.5px;
+        font-weight:700;background:var(--cta);color:var(--on-cta)">Crear mi primera cuenta</button></div>`;
+    $('firstacc').onclick=()=>go('s-acc');
+  }else
   $('accts').innerHTML=DB.cfg.accounts.map(a=>{
     const c=ACOLORS[a.color%ACOLORS.length];
     return `<div class="acc ${openAcc[a.id]?'open':''}" data-acc="${a.id}">
@@ -1066,7 +1072,14 @@ $('dst').onclick=e=>{const b=e.target.closest('[data-d]');if(!b)return;
 $('owneron').onclick=()=>{d.ownerOpen=true;sync();};
 $('owneroff').onclick=()=>{d.ownerOpen=false;d.owner=null;sync();};
 $('cats').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;d.cat=b.dataset.c;sync();};
-$('open').onclick=()=>openSheet('out');
+$('open').onclick=async()=>{
+  if(!DB.cfg.accounts.length){
+    const r=await modal({title:'Primero una cuenta',
+      text:'Para registrar movimientos necesitas al menos una cuenta: tu banco o tu efectivo.',
+      ok:'Crear cuenta'});
+    if(r.action==='ok')go('s-acc');
+    return;}
+  openSheet('out');};
 $('close').onclick=()=>$('sheet').classList.remove('open');
 $('btn-pay').onclick=()=>openSheet('pay');
 $('btn-buy').onclick=()=>{openSheet('out');if(DB.cfg.cards[0])d.acc=DB.cfg.cards[0].id;sync();};
@@ -1112,6 +1125,10 @@ document.querySelectorAll('.nav2 button[data-s]').forEach(b=>
 /* ============ ajustes: cuentas ============ */
 function renderAccts(){
   const B=balances();
+  if(!DB.cfg.accounts.length){
+    $('acctedit').innerHTML=`<div class="hint" style="margin:0 0 4px">Todavía no tienes cuentas.
+      Crea una por cada banco o billetera que uses, y otra para tu efectivo.</div>`;
+    return;}
   $('acctedit').innerHTML=DB.cfg.accounts.map((a,i)=>{
     const av=B.bal[a.id]||0;
     return `<div class="ed"><div class="hd"><span>Cuenta ${i+1}</span><button data-dela="${a.id}">Quitar</button></div>
@@ -1148,7 +1165,7 @@ $('acctedit').addEventListener('click',async e=>{
   const c=e.target.closest('[data-ac]');
   if(c){DB.cfg.accounts[+c.dataset.i].color=+c.dataset.ac;await Store.save(DB);renderAccts();render();return;}
   const ap=e.target.closest('[data-addp]');
-  if(ap){DB.cfg.accounts[+ap.dataset.addp].pockets.push({id:'p'+Date.now(),name:'Nuevo bolsillo',balance:0});
+  if(ap){DB.cfg.accounts[+ap.dataset.addp].pockets.push({id:'p'+Date.now(),name:'Bolsillo',balance:0});
     await Store.save(DB);renderAccts();render();return;}
   const dp=e.target.closest('[data-delp]');
   if(dp){const r=await modal({title:'Quitar bolsillo',text:'Su plata vuelve al disponible de la cuenta.',ok:'Quitar'});
@@ -1161,12 +1178,16 @@ $('acctedit').addEventListener('click',async e=>{
     DB.cfg.accounts=DB.cfg.accounts.filter(a=>a.id!==da.dataset.dela);
     await Store.save(DB);renderAccts();render();}});
 $('addacct').onclick=async()=>{
-  DB.cfg.accounts.push({id:'a'+Date.now(),name:'Nueva cuenta',balance:0,
+  DB.cfg.accounts.push({id:'a'+Date.now(),name:'Mi cuenta',balance:0,
     color:DB.cfg.accounts.length%ACOLORS.length,pockets:[]});
   await Store.save(DB);renderAccts();render();};
 
 /* ============ ajustes: tarjetas ============ */
 function renderCardEdit(){
+  if(!DB.cfg.cards.length){
+    $('cardedit').innerHTML=`<div class="hint" style="margin:0 0 4px">No tienes tarjetas registradas.
+      Agrégalas solo si quieres llevar el control de lo que debes en ellas.</div>`;
+    return;}
   $('cardedit').innerHTML=DB.cfg.cards.map((c,i)=>`
     <div class="ed"><div class="hd"><span>Tarjeta ${i+1}</span><button data-del="${c.id}">Quitar</button></div>
       <input data-f="name" data-i="${i}" value="${c.name}" placeholder="Nombre">
@@ -1186,7 +1207,7 @@ $('cardedit').addEventListener('click',async e=>{
     if(r.action!=='ok')return;
     DB.cfg.cards=DB.cfg.cards.filter(c=>c.id!==dl.dataset.del);await Store.save(DB);renderCardEdit();render();}});
 $('addcard').onclick=async()=>{
-  DB.cfg.cards.push({id:'c'+Date.now(),name:'Nueva tarjeta',limit:0,g:DB.cfg.cards.length%GRADS.length});
+  DB.cfg.cards.push({id:'c'+Date.now(),name:'Mi tarjeta',limit:0,g:DB.cfg.cards.length%GRADS.length});
   await Store.save(DB);renderCardEdit();render();};
 
 /* ============ estilo y general ============ */
