@@ -318,7 +318,7 @@ section{position:relative;}
     <div class="h" style="padding-top:10px"><div class="eyebrow" id="pe-month"></div></div>
     <div class="set">
       <label>Cuánto te entra</label>
-      <input id="pl-inc" inputmode="numeric" data-money placeholder="0">
+      <input id="pl-inc" inputmode="decimal" data-money placeholder="0">
       <label>Dónde cae</label>
       <select id="pl-src"></select>
       <label>Conceptos</label>
@@ -371,7 +371,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v8</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v9</div>
     </div>
   </section>
 
@@ -409,7 +409,7 @@ section{position:relative;}
         <option value="ARS">ARS · peso argentino</option><option value="PEN">PEN · sol</option>
       </select>
       <label>Presupuesto mensual de gasto</label>
-      <input id="cfg-budget" inputmode="numeric" data-money placeholder="0">
+      <input id="cfg-budget" inputmode="decimal" data-money placeholder="0">
       <div class="hint" style="padding-bottom:24px">El presupuesto aparece como barra en el Resumen. Déjalo en 0 para ocultarlo.</div>
     </div>
   </section>
@@ -582,20 +582,47 @@ const money=n=>SYM[DB.cfg.cur]+' '+fmt(n);
 const MO=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const $=i=>document.getElementById(i);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2600);}
-const clean=v=>{
-  let s=String(v).replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.');
-  const n=parseFloat(s);return isNaN(n)?0:n;};
+const clean=v=>{const n=parseFloat(rawFromField(v));return isNaN(n)?0:n;};
 /* valor formateado para los campos de dinero */
 const mv=n=>(+n)?money(+n):'';
 /* todo input con data-money se formatea mientras se escribe */
 const grp=x=>String(x).replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+/* El campo muestra texto con formato, pero el valor real se guarda aparte en
+   data-raw. Asi ni el punto de miles ni el borrado confunden la lectura. */
+function rawFromField(v){
+  const s=String(v).replace(/[^\d.,]/g,'');
+  const i=s.indexOf(',');
+  if(i<0)return s.replace(/\./g,'');
+  return s.slice(0,i).replace(/\./g,'')+'.'+s.slice(i+1).replace(/\D/g,'').slice(0,2);
+}
+function fmtField(raw){
+  if(raw===''||raw==null)return '';
+  const dot=String(raw).indexOf('.');
+  const ip=(dot<0?String(raw):String(raw).slice(0,dot)).replace(/\D/g,'');
+  const dp=dot<0?null:String(raw).slice(dot+1).replace(/\D/g,'');
+  return SYM[DB.cfg.cur]+' '+grp(ip||'0')+(dp!==null?','+dp:'');
+}
 document.addEventListener('input',e=>{
   const el=e.target;
   if(!el||!el.matches||!el.matches('input[data-money]'))return;
-  let v=el.value.replace(/[^\d.,]/g,'').replace(/\./g,',');
-  const p=v.split(','),ip=p[0].replace(/\D/g,''),
-        dp=p.length>1?p.slice(1).join('').replace(/\D/g,'').slice(0,2):null;
-  el.value=(ip||dp!==null)?SYM[DB.cfg.cur]+' '+grp(ip||'0')+(dp!==null?','+dp:''):'';
+  let raw=el.dataset.raw!==undefined?el.dataset.raw:rawFromField(el.value);
+  const it=e.inputType||'';
+  if(it.indexOf('delete')===0)raw=raw.slice(0,-1);
+  else if(e.data){
+    for(const ch of e.data){
+      if(ch>='0'&&ch<='9'){
+        const d=raw.indexOf('.');
+        if(d>=0&&raw.length-d-1>=2)continue;
+        raw+=ch;
+      }else if((ch==='.'||ch===',')&&raw.indexOf('.')<0)raw=(raw||'0')+'.';
+    }
+  }else raw=rawFromField(el.value);
+  el.dataset.raw=raw;
+  const out=fmtField(raw);
+  if(out!==el.value){
+    el.value=out;
+    try{el.setSelectionRange(out.length,out.length);}catch(_){}
+  }
 },true);
 const mkey=dt=>dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
 const mlabel=dt=>MO[dt.getMonth()]+' '+dt.getFullYear();
@@ -605,7 +632,7 @@ function modal(o){
   return new Promise(res=>{
     const box=$('mbox');
     box.innerHTML=`<h4>${o.title}</h4>${o.text?`<p>${o.text}</p>`:''}
-      ${o.input?`<input id="minput" inputmode="numeric" data-money value="${mv(o.value)}">`:''}
+      ${o.input?`<input id="minput" inputmode="decimal" data-money value="${mv(o.value)}">`:''}
       <div class="mbtns">
         <button class="pri" data-r="ok">${o.ok||'Aceptar'}</button>
         ${o.alt?`<button data-r="alt">${o.alt}</button>`:''}
@@ -934,7 +961,7 @@ function renderPlanEdit(){
   $('planedit').innerHTML=P.items.map((it,i)=>`
     <div class="ed"><div class="hd"><span>Concepto ${i+1}</span><button data-delpl="${i}">Quitar</button></div>
       <input data-pl="name" data-i="${i}" value="${it.name}" placeholder="Nombre">
-      <input data-pl="amount" data-i="${i}" inputmode="numeric" data-money value="${mv(it.amount)}" placeholder="Valor">
+      <input data-pl="amount" data-i="${i}" inputmode="decimal" data-money value="${mv(it.amount)}" placeholder="Valor">
       <div class="duo">
         <select data-pl="kind" data-i="${i}">
           <option value="expense" ${it.kind==='expense'?'selected':''}>Pago o transferencia · sale de la cuenta</option>
@@ -1143,7 +1170,7 @@ function renderCardEdit(){
   $('cardedit').innerHTML=DB.cfg.cards.map((c,i)=>`
     <div class="ed"><div class="hd"><span>Tarjeta ${i+1}</span><button data-del="${c.id}">Quitar</button></div>
       <input data-f="name" data-i="${i}" value="${c.name}" placeholder="Nombre">
-      <input data-f="limit" data-i="${i}" inputmode="numeric" data-money value="${mv(c.limit)}" placeholder="Cupo total (opcional)">
+      <input data-f="limit" data-i="${i}" inputmode="decimal" data-money value="${mv(c.limit)}" placeholder="Cupo total (opcional)">
       <div class="swatches">${GRADS.map((g,gi)=>`<button class="sw ${c.g===gi?'on':''}" data-g="${gi}" data-i="${i}"
         style="background:linear-gradient(140deg,${g[1]},${g[0]})"></button>`).join('')}</div></div>`).join('');
 }
