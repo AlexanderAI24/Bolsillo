@@ -1,4 +1,4 @@
-const CACHE='bolsillo-v15';
+const CACHE='bolsillo-v16';
 const FILES=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',e=>{
   self.skipWaiting();

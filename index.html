@@ -303,6 +303,11 @@ section{position:relative;}
 .rz.on{color:var(--income);border-color:var(--income);}
 .grp{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;
   letter-spacing:.07em;margin:14px 0 7px;}
+.grab{cursor:grab;user-select:none;}
+.ed.dragging{position:relative;z-index:30;box-shadow:0 14px 30px rgba(0,0,0,.35);
+  border-color:var(--cta);opacity:.97;}
+.ed.slot{outline:2px dashed var(--cta);outline-offset:-2px;}
+#planedit.reordenando{touch-action:none;}
 .qd{display:flex;justify-content:space-between;align-items:center;gap:10px;
   margin-top:8px;padding-top:9px;border-top:1px solid var(--line);
   font-size:11.5px;color:var(--text-dim);font-weight:600;}
@@ -367,6 +372,8 @@ section{position:relative;}
       <label>Dónde cae</label>
       <select id="pl-src"></select>
       <label>Conceptos</label>
+      <div class="hint" style="margin:0 0 10px">Mantén presionado un concepto y arrástralo
+        para cambiar el orden.</div>
       <div id="pe-left" style="margin-bottom:10px"></div>
       <div id="planedit"></div>
       <button class="btn" id="addplan">Agregar concepto</button>
@@ -424,7 +431,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v15</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v16</div>
     </div>
   </section>
 
@@ -890,7 +897,9 @@ function render(){
   const B=balances();
   if(homeAcc!=='all'&&!DB.cfg.accounts.some(a=>a.id===homeAcc))homeAcc='all';
   let mv=monthMov();
-  if(homeAcc!=='all')mv=mv.filter(m=>belongs(m,homeAcc));
+  /* al filtrar por cuenta, los movimientos de tarjeta siguen a la vista:
+     son un gasto tuyo aunque no salgan de esa cuenta */
+  if(homeAcc!=='all')mv=mv.filter(m=>belongs(m,homeAcc)||isCard(m.src)||isCard(m.dst));
 
   /* selector de cuenta */
   $('accsel').innerHTML=DB.cfg.accounts.length>1
@@ -906,15 +915,14 @@ function render(){
   let libre=0,guardado=0;
   scope.forEach(a=>{libre+=B.bal[a.id]||0;
     a.pockets.forEach(pk=>guardado+=B.bal[a.id+':'+pk.id]||0);});
-  $('totlbl').textContent=homeAcc==='all'
-    ?(DB.cfg.accounts.length>1?'Total en tus cuentas':'Total'):
-    (DB.cfg.accounts.find(a=>a.id===homeAcc)||{}).name||'Total';
-  $('total').innerHTML='<small>'+SYM[DB.cfg.cur]+'</small>'+fmt(libre+guardado);
+  $('totlbl').textContent=homeAcc==='all'?'Disponible':
+    'Disponible en '+((DB.cfg.accounts.find(a=>a.id===homeAcc)||{}).name||'');
+  $('total').innerHTML='<small>'+SYM[DB.cfg.cur]+'</small>'+fmt(libre);
+  $('total').style.color=libre<0?'var(--expense)':'var(--text)';
   $('split').innerHTML=DB.cfg.accounts.length?`
-    <div><div class="k">Disponible</div><div class="v num"
-      ${libre<0?'style="color:var(--expense)"':''}>${money(libre)}</div></div>
     <div><div class="k">Guardado en bolsillos</div><div class="v num"
-      style="color:var(--cta)">${money(guardado)}</div></div>`:'';
+      style="color:var(--cta)">${money(guardado)}</div></div>
+    <div><div class="k">Total con bolsillos</div><div class="v num">${money(libre+guardado)}</div></div>`:'';
   $('cardpill').style.display=DB.cfg.cards.length?'inline-flex':'none';
   $('cardpill').innerHTML=`<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--expense);stroke-width:1.8;fill:none"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/></svg>
     Tarjetas <b>${money(B.cardTotal)}</b><span class="ch">›</span>`;
@@ -987,8 +995,9 @@ function render(){
       <div class="cr"><span>Va al corte del ${sp.nextClose?DFMT(sp.nextClose):'próximo mes'}</span>
         <b class="num">${money(sp.nextTotal)}</b></div>
       <div class="cr" style="border-top:1px solid var(--line);margin-top:6px;padding-top:9px">
-        <span>Dinero ya guardado</span><b class="num" style="color:var(--income)">${money(sp.listo)}</b></div>
-      <div class="cr"><span>Te falta conseguir</span>
+        <span>De eso ya lo tienes en bolsillo</span>
+        <b class="num" style="color:var(--income)">${money(sp.listo)}</b></div>
+      <div class="cr"><span>Te falta guardar</span>
         <b class="num" style="color:${sp.falta>0?'var(--expense)':'var(--income)'}">${money(sp.falta)}</b></div>
       <button class="cpay" data-pay="${c.id}">Ver compras y pagar</button></div>`;}).join('');
   $('cycles').querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>openPay(b.dataset.pay));
@@ -1239,7 +1248,8 @@ function renderPlanEdit(){
   $('planedit').innerHTML=P.items.map((it,i)=>{
     queda-=(+it.amount||0);
     return `
-    <div class="ed"><div class="hd"><span>Concepto ${i+1}</span><button data-delpl="${i}">Quitar</button></div>
+    <div class="ed" data-idx="${i}"><div class="hd"><span class="grab">⋮⋮ Concepto ${i+1}</span>
+      <button data-delpl="${i}">Quitar</button></div>
       <input data-pl="name" data-i="${i}" value="${it.name}" placeholder="Nombre">
       <input data-pl="amount" data-i="${i}" inputmode="decimal" data-money value="${mv(it.amount)}" placeholder="Valor">
       <div class="duo">
@@ -1292,6 +1302,56 @@ $('planedit').addEventListener('click',async e=>{
   if(r.action!=='ok')return;
   getPlan(null,true).items.splice(+b.dataset.delpl,1);
   await Store.save(DB);renderPlanEdit();render();});
+/* arrastrar para reordenar: se activa manteniendo presionado */
+let dg={i:null,el:null,y0:0,timer:null,pid:null};
+function dgEnd(cancel){
+  clearTimeout(dg.timer);dg.timer=null;
+  if(dg.el){dg.el.classList.remove('dragging');dg.el.style.transform='';}
+  document.querySelectorAll('#planedit .ed').forEach(x=>x.classList.remove('slot'));
+  $('planedit').classList.remove('reordenando');
+  const from=dg.i,to=dg.to;
+  dg={i:null,el:null,y0:0,timer:null,pid:null};
+  if(!cancel&&from!==null&&to!==undefined&&to!==from){
+    const P=getPlan(null,true);
+    const it=P.items.splice(from,1)[0];
+    P.items.splice(to,0,it);
+    Store.save(DB).then(()=>{renderPlanEdit();render();toast('Orden actualizado');});
+  }
+}
+$('planedit').addEventListener('pointerdown',e=>{
+  const ed=e.target.closest('.ed');if(!ed)return;
+  if(e.target.closest('input,select,button'))return;
+  const idx=+ed.dataset.idx;
+  dg.y0=e.clientY;
+  dg.timer=setTimeout(()=>{
+    dg.i=idx;dg.el=ed;dg.to=idx;
+    ed.classList.add('dragging');
+    $('planedit').classList.add('reordenando');
+    if(navigator.vibrate)navigator.vibrate(18);
+  },300);
+});
+$('planedit').addEventListener('pointermove',e=>{
+  if(dg.timer&&dg.i===null){
+    if(Math.abs(e.clientY-dg.y0)>12){clearTimeout(dg.timer);dg.timer=null;}
+    return;}
+  if(dg.i===null)return;
+  e.preventDefault();
+  dg.el.style.transform='translateY('+(e.clientY-dg.y0)+'px)';
+  const eds=[...$('planedit').querySelectorAll('.ed')];
+  let to=dg.i;
+  eds.forEach((x,k)=>{
+    if(k===dg.i)return;
+    const r=x.getBoundingClientRect(),mid=r.top+r.height/2;
+    if(k<dg.i&&e.clientY<mid)to=Math.min(to,k);
+    if(k>dg.i&&e.clientY>mid)to=Math.max(to,k);
+  });
+  dg.to=to;
+  eds.forEach((x,k)=>x.classList.toggle('slot',k===to&&k!==dg.i));
+});
+$('planedit').addEventListener('pointerup',()=>dgEnd(false));
+$('planedit').addEventListener('pointercancel',()=>dgEnd(true));
+$('planedit').addEventListener('pointerleave',()=>{if(dg.timer&&dg.i===null){clearTimeout(dg.timer);dg.timer=null;}});
+
 $('addplan').onclick=async()=>{
   getPlan(null,true).items.push({name:'Nuevo concepto',amount:0,kind:'expense',cat:'Otro',target:null,done:false});
   await Store.save(DB);renderPlanEdit();render();};
@@ -1657,17 +1717,20 @@ function syncPay(){
         <button class="bk"></button>
         <div class="bm"><div class="bn">${m.cat}${m.note?' · '+m.note:''}</div>
           <div class="bd">${DFMT(new Date(m.ts))}${c?' · vence '+DFMT(c.pay):''}</div>
-          <button class="rz ${m.res?'on':''}" data-res="${m.id}">${m.res?'Dinero guardado':'Sin respaldo'}</button></div>
+          <button class="rz ${m.res?'on':''}" data-res="${m.id}">${m.res?'✓ En bolsillo':'Sin guardar'}</button></div>
         <div class="ba num">${money(pend(m))}</div></div>`;}).join(''):'';
-    const html=blk('Ya facturado',sp.due)+blk('Próximo corte',sp.next);
-    $('pay-list').innerHTML=html||'<div class="empty"><b>Nada pendiente</b>Esta tarjeta está al día.</div>';
+    const html=blk('Ya facturado · toca pagarlo',sp.due)+blk('Aún no te lo cobran',sp.next);
+    $('pay-list').innerHTML=(html?`<div class="hint" style="margin:4px 0 12px">
+      Toca una compra para incluirla en el pago. La etiqueta de abajo te dice si ya
+      apartaste esa plata en un bolsillo o si todavía te falta guardarla.</div>`+html:'')
+      ||'<div class="empty"><b>Nada pendiente</b>Esta tarjeta está al día.</div>';
     $('pay-list').querySelectorAll('[data-b]').forEach(el=>el.onclick=()=>{
       const id=el.dataset.b;pay.sel[id]=!pay.sel[id];syncPay();});
     $('pay-list').querySelectorAll('[data-res]').forEach(b=>b.onclick=async ev=>{
       ev.stopPropagation();
       const m=DB.mov.find(x=>x.id===b.dataset.res);if(!m)return;
       m.res=!m.res;await Store.save(DB);syncPay();render();
-      toast(m.res?'Marcada: ya tienes el dinero':'Marcada como sin respaldo');});
+      toast(m.res?'Ya guardaste esa plata en un bolsillo':'Marcada como sin guardar');});
   }else{
     $('pay-list').innerHTML=`<div class="hint" style="margin-top:4px">
       Escribe cuánto vas a pagar. Se abona a las compras más antiguas primero,
