@@ -213,6 +213,9 @@ section{position:relative;}
 .set{padding:4px 20px 0;}
 .set label{display:block;font-size:11.5px;font-weight:600;color:var(--text-dim);text-transform:uppercase;
   letter-spacing:.08em;margin:20px 0 8px;}
+.set textarea{width:100%;padding:12px 14px;border-radius:13px;background:var(--surface);
+  border:1px solid var(--line);font-size:14px;font-family:inherit;outline:none;resize:vertical;color:var(--text);}
+.set textarea::placeholder{color:var(--text-dim);}
 .set input,.set select{width:100%;padding:12px 14px;border-radius:13px;background:var(--surface);
   border:1px solid var(--line);font-size:15px;font-weight:500;outline:none;}
 .set .btn{width:100%;padding:13px;border-radius:13px;border:1px solid var(--line);background:var(--surface);
@@ -419,6 +422,9 @@ section{position:relative;}
       <button class="mi" data-go="s-fix">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg></span>
         <span class="n">Gastos fijos</span><span class="ch">›</span></button>
+      <button class="mi" data-go="s-inbox" id="mi-inbox" style="display:none">
+        <span class="mic"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4M4 13l2.5-7h11L20 13v5a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></svg></span>
+        <span class="n">Bandeja del celular</span><span class="ch">›</span></button>
       <button class="mi" data-go="s-scan">
         <span class="mic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 15l5-4 4 3 3-2 6 4"/><circle cx="8.5" cy="9.5" r="1.3"/></svg></span>
         <span class="n">Leer una captura</span><span class="ch">›</span></button>
@@ -431,7 +437,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v18</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v20</div>
     </div>
   </section>
 
@@ -464,13 +470,39 @@ section{position:relative;}
         Si abres la app días después, también se ponen al día. Cada uno se aplica una sola vez por mes.</div></div>
   </section>
 
+  <section id="v-s-inbox" style="display:none">
+    <button class="back" data-back="set">‹ Ajustes</button>
+    <div class="h" style="padding-top:10px"><div class="eyebrow">Bandeja del celular</div></div>
+    <div class="set">
+      <div id="inb-perm"></div>
+      <label>Movimientos detectados</label>
+      <div id="inb-status" class="hint" style="margin-top:0"></div>
+      <div id="inb-list"></div>
+      <label>Traer SMS viejos</label>
+      <div class="duo">
+        <button class="btn" data-sms="30" style="margin:0">Últimos 30 días</button>
+        <button class="btn" data-sms="90" style="margin:0">90 días</button>
+      </div>
+      <label>Modo aprendizaje</label>
+      <button class="btn" id="inb-log">Ver lo que ha capturado</button>
+      <div id="inb-logbox"></div>
+      <div class="hint" style="padding-bottom:24px">Aquí queda el texto crudo de cada notificación,
+        aunque la app todavía no sepa interpretarla. Sirve para ir agregando bancos nuevos.</div>
+    </div>
+  </section>
+
   <section id="v-s-scan" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
     <div class="h" style="padding-top:10px"><div class="eyebrow">Leer una captura</div></div>
     <div class="set">
       <label>Dónde se hicieron esos movimientos</label>
       <select id="scan-src"></select>
-      <button class="btn" id="scan-pick" style="margin-top:12px">Elegir captura de pantalla</button>
+      <label>Pegar mensajes del banco</label>
+      <textarea id="scan-txt" rows="5" placeholder="Pega aquí uno o varios SMS o notificaciones. Puedes pegar muchos de una vez."></textarea>
+      <button class="btn" id="scan-read" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">Interpretar mensajes</button>
+      <div class="hint">Funciona sin conexión y sin clave: la app entiende los formatos de Bancolombia.</div>
+      <label>O leer una imagen</label>
+      <button class="btn" id="scan-pick">Elegir captura de pantalla</button>
       <input type="file" id="scan-file" accept="image/*" style="display:none">
       <div id="scan-status" class="hint"></div>
       <div id="scan-res"></div>
@@ -1551,6 +1583,191 @@ $('save').onclick=async()=>{
   $('sheet').classList.remove('open');render();
   toast(era?'Cambios guardados':'Guardado · '+dateWord(d.date));};
 
+/* ============ puente con el celular ============ */
+const NATIVO=(()=>{try{return !!(window.Android&&window.Android.esNativo&&window.Android.esNativo());}
+  catch(e){return false;}})();
+let bandeja=[];
+function renderInbox(){
+  if(!NATIVO){$('inb-status').textContent='Esta pantalla solo funciona dentro de la app instalada.';return;}
+  const okN=window.Android.permisoNotificaciones(),okS=window.Android.permisoSms();
+  $('inb-perm').innerHTML=`
+    <label style="margin-top:4px">Permisos</label>
+    <div class="ed"><div class="hd"><span>Leer notificaciones</span>
+      <span style="color:${okN?'var(--income)':'var(--expense)'};font-size:12px;font-weight:700">
+        ${okN?'Activo':'Apagado'}</span></div>
+      <div class="hint" style="margin:0 0 8px">Para capturar compras de Nu, BBVA y Google Pay.</div>
+      ${okN?'':'<button class="mini" id="perm-n">Activar en ajustes de Android</button>'}</div>
+    <div class="ed"><div class="hd"><span>Leer SMS</span>
+      <span style="color:${okS?'var(--income)':'var(--expense)'};font-size:12px;font-weight:700">
+        ${okS?'Activo':'Apagado'}</span></div>
+      <div class="hint" style="margin:0 0 8px">Bancolombia avisa por mensaje de texto.</div>
+      ${okS?'':'<button class="mini" id="perm-s">Dar permiso</button>'}</div>`;
+  if($('perm-n'))$('perm-n').onclick=()=>window.Android.abrirPermisoNotificaciones();
+  if($('perm-s'))$('perm-s').onclick=()=>window.Android.pedirPermisoSms();
+  cargarBandeja();
+}
+function cargarBandeja(){
+  if(!NATIVO)return;
+  let crudos=[];
+  try{crudos=JSON.parse(window.Android.pendientes()||'[]');}catch(e){}
+  const vistos=new Set(DB.mov.map(m=>m.ref).filter(Boolean));
+  bandeja=[];let ya=0,sin=0;
+  crudos.forEach(c=>{
+    const r=interpretar(c.texto);
+    if(!r){sin++;return;}
+    const ref='sms:'+r.amount+':'+(r.ts||0)+':'+r.desc.slice(0,18);
+    if(vistos.has(ref)){ya++;return;}
+    bandeja.push({id:c.id,app:c.app,fecha:isoOf(new Date(r.ts||c.ts)),desc:r.desc,
+      monto:r.amount,t:r.t,cat:categoriza(r.desc,r.t),regla:r.regla,ref,
+      src:(flat()[0]||{}).id,dst:null,raw:c.texto});
+  });
+  $('inb-status').textContent=bandeja.length
+    ?bandeja.length+' por revisar'+(ya?' · '+ya+' ya estaban':'')
+    :(crudos.length?'Nada nuevo'+(sin?' ('+sin+' mensajes no se entendieron)':''):'Todavía no ha llegado nada.');
+  drawInbox();
+}
+function drawInbox(){
+  if(!bandeja.length){$('inb-list').innerHTML='';return;}
+  const F=flat().concat(DB.cfg.cards.map(c=>({id:c.id,n:c.name+' (tarjeta)'})));
+  const cats=CATS.out.map(([n])=>n),cin=CATS.in.map(([n])=>n);
+  $('inb-list').innerHTML=bandeja.map((x,i)=>`
+    <div class="ed">
+      <div class="hd"><span>${x.app} · ${x.t==='in'?'Ingreso':x.t==='move'?'Retiro':'Gasto'}</span>
+        <button data-ib="${i}">Descartar</button></div>
+      <input data-if="desc" data-i="${i}" value="${x.desc.replace(/"/g,'&quot;')}">
+      <div class="duo">
+        <input class="sm" data-if="monto" data-i="${i}" inputmode="decimal" data-money value="${mv(x.monto)}">
+        <select data-if="cat" data-i="${i}">${(x.t==='in'?cin:cats).map(n=>
+          `<option value="${n}" ${x.cat===n?'selected':''}>${n}</option>`).join('')}</select>
+      </div>
+      <div class="duo">
+        <input data-if="fecha" data-i="${i}" type="date" value="${x.fecha}">
+        <select data-if="src" data-i="${i}">${F.map(o=>
+          `<option value="${o.id}" ${x.src===o.id?'selected':''}>${o.n}</option>`).join('')}</select>
+      </div>
+      ${x.t==='move'?`<select data-if="dst" data-i="${i}">
+        <option value="">¿A dónde entró el efectivo?</option>
+        ${flat().filter(o=>o.id!==x.src).map(o=>
+          `<option value="${o.id}" ${x.dst===o.id?'selected':''}>${o.n}</option>`).join('')}</select>`:''}
+      <div class="qd"><span>${x.regla}</span><b style="font-size:11px;color:var(--text-dim)">
+        ${x.raw.slice(0,42)}…</b></div>
+    </div>`).join('')
+    +`<button class="btn" id="inb-add" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">
+       Registrar ${bandeja.length} movimientos</button>`;
+  $('inb-add').onclick=async()=>{
+    if(bandeja.some(x=>x.t==='move'&&!x.dst))return toast('Falta decir a dónde entró el efectivo');
+    const ids=[];
+    bandeja.forEach((x,n)=>{
+      const m={id:'in'+Date.now()+n,ts:isoTs(x.fecha),t:x.t,amount:x.monto,
+        src:x.src,cat:x.t==='move'?'Retiro en cajero':x.cat,note:x.desc,ref:x.ref};
+      if(x.t==='move')m.dst=x.dst;
+      if(x.t==='out'&&isCard(x.src))m.paidAmt=0;
+      DB.mov.push(m);ids.push(x.id);});
+    try{window.Android.consumir(JSON.stringify(ids));}catch(e){}
+    await Store.save(DB);cargarBandeja();render();
+    toast('Se registraron '+ids.length+' movimientos');};
+}
+$('inb-list').addEventListener('input',e=>{
+  const t=e.target;if(!t.dataset.if)return;const x=bandeja[+t.dataset.i];
+  if(t.dataset.if==='desc')x.desc=t.value;
+  else if(t.dataset.if==='monto')x.monto=clean(t.value);});
+$('inb-list').addEventListener('change',e=>{
+  const t=e.target;if(!t.dataset.if)return;const x=bandeja[+t.dataset.i];
+  if(['cat','fecha','src','dst'].includes(t.dataset.if)){x[t.dataset.if]=t.value;
+    if(t.dataset.if==='src')drawInbox();}});
+$('inb-list').addEventListener('click',e=>{
+  const b=e.target.closest('[data-ib]');if(!b)return;
+  const x=bandeja[+b.dataset.ib];
+  try{window.Android.consumir(JSON.stringify([x.id]));}catch(err){}
+  bandeja.splice(+b.dataset.ib,1);drawInbox();
+  $('inb-status').textContent=bandeja.length+' por revisar';});
+document.querySelectorAll('[data-sms]').forEach(b=>b.onclick=()=>{
+  if(!NATIVO)return toast('Solo dentro de la app instalada');
+  if(!window.Android.permisoSms())return toast('Primero da el permiso de SMS');
+  const n=window.Android.importarSms(+b.dataset.sms);
+  toast(n<0?'No se pudieron leer los SMS':'Se trajeron '+n+' mensajes');
+  cargarBandeja();});
+$('inb-log').onclick=()=>{
+  if(!NATIVO)return;
+  let r=[];try{r=JSON.parse(window.Android.registro()||'[]');}catch(e){}
+  $('inb-logbox').innerHTML=r.length?r.slice(-40).reverse().map(x=>
+    `<div class="ed" style="padding:10px 12px"><div class="hd" style="margin-bottom:4px">
+      <span>${x.app}</span><span style="font-size:10px;color:var(--text-dim)">${x.origen}</span></div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.45">${x.texto}</div></div>`).join('')
+    :'<div class="hint">Todavía no ha capturado nada.</div>';
+};
+window.onMensajesNuevos=()=>{if(NATIVO&&$('v-s-inbox').style.display==='block')cargarBandeja();};
+
+/* ============ interprete de mensajes bancarios ============ */
+const MESESTXT={enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,
+  septiembre:8,sept:8,sep:8,octubre:9,noviembre:10,diciembre:11};
+function montoSMS(x){
+  let v=String(x||'').replace(/[^\d.,]/g,'');
+  const d=v.match(/[.,](\d{1,2})$/);
+  const ent=(d?v.slice(0,v.length-d[0].length):v).replace(/\D/g,'');
+  return parseFloat(ent+(d?'.'+d[1]:''))||0;
+}
+function fechaSMS(t){
+  let m=t.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(m){let y=+m[3];if(y<100)y+=2000;return new Date(y,+m[2]-1,+m[1],12).getTime();}
+  m=t.match(/(\d{1,2})\s+(?:de\s+)?([a-záéíóúA-ZÁÉÍÓÚ]+)\s+(?:de\s+)?(\d{4})/);
+  if(m){const k=MESESTXT[m[2].toLowerCase()];if(k!==undefined)return new Date(+m[3],k,+m[1],12).getTime();}
+  return null;
+}
+const limpiaTxt=x=>String(x||'').replace(/\s+/g,' ').trim().replace(/[.,]$/,'');
+const REGLAS=[
+ {id:'transferencia enviada',re:/transferiste\s+\$?([\d.,]+)\s+a la llave\s+(\S+)\s+desde tu cuenta\s+\*?(\d+)\s+a\s+(.+?)\s+el\s/i,
+  arma:m=>({t:'out',amount:montoSMS(m[1]),desc:limpiaTxt(m[4])})},
+ {id:'transferencia recibida',re:/recibiste una transferencia de\s+(.+?)\s+por\s+\$?([\d.,]+)\s+en tu cuenta\s+\*?(\d+)/i,
+  arma:m=>({t:'in',amount:montoSMS(m[2]),desc:limpiaTxt(m[1])})},
+ {id:'pago QR',re:/pagaste\s+\$?([\d.,]+)\s+por codigo qr desde tu cuenta\s+\*?(\d+)\s+a la llave\s+(\S+)/i,
+  arma:m=>({t:'out',amount:montoSMS(m[1]),desc:'Pago QR '+limpiaTxt(m[3])})},
+ {id:'botón Bancolombia',re:/transferiste\s+\$?([\d.,]+)\s+por bot[oó]n bancolombia a\s+(.+?)\s+desde producto/i,
+  arma:m=>({t:'out',amount:montoSMS(m[1]),desc:limpiaTxt(m[2])})},
+ {id:'pago a comercio',re:/pagaste\s+\$?([\d.,]+)\s+a\s+(.+?)\s+desde tu producto/i,
+  arma:m=>({t:'out',amount:montoSMS(m[1]),desc:limpiaTxt(m[2])})},
+ {id:'retiro',re:/retiraste\s+\$?([\d.,]+)\s+en nuestro corresponsal\s+(.+?),?\s+el\s/i,
+  arma:m=>({t:'move',amount:montoSMS(m[1]),desc:'Retiro '+limpiaTxt(m[2])})},
+ {id:'compra',re:/compra(?:ste)?\s+(?:aprobada\s+)?(?:de\s+|por\s+)?\$?\s?([\d.,]+)\s+en\s+(.+?)(?:[.,]|$)/i,
+  arma:m=>({t:'out',amount:montoSMS(m[1]),desc:limpiaTxt(m[2])})},
+ {id:'Google Pay',re:/^(?:cop|usd|\$)\s?([\d.,]+)[\s\S]{0,60}?\b(?:en|at)\s+(.+?)(?:\n|$)/i,
+  arma:m=>({t:'out',amount:montoSMS(m[1]),desc:limpiaTxt(m[2])})},
+];
+const PISTAS=[[/exito|jeronimo|d1|ara|carulla|olimpica|euro|mercado|supermerc/i,'Mercado'],
+ [/rappi|domicilio/i,'Domicilios'],[/miniso|dollarcity|falabella|zara|temu/i,'Ropa'],
+ [/uber|didi|cabify|taxi|flypass|peaje|terpel|gasolin|estacion/i,'Transporte'],
+ [/comcel|claro|movistar|tigo|epm|empresas publicas|acueducto|energia|gas/i,'Servicios'],
+ [/smart ?fit|gym|gimnasio|bodytech/i,'Gimnasio'],
+ [/netflix|spotify|disney|hbo|max|prime|suscrip/i,'Suscripciones'],
+ [/drogueria|farmacia|eps|clinica|medic/i,'Salud'],
+ [/cine|bar |restaurante|burger|pizza|mcdonald|frisby|crepes/i,'Restaurante']];
+function categoriza(desc,t){
+  if(t==='in')return 'Otro';
+  for(const [re,c] of PISTAS)if(re.test(desc))return c;
+  return 'Otro';
+}
+function interpretar(texto){
+  const t=String(texto).replace(/\s+/g,' ').trim();
+  if(t.length<8)return null;
+  for(const r of REGLAS){
+    const m=t.match(r.re);
+    if(m){const o=r.arma(m);
+      if(o.amount>0){o.regla=r.id;o.ts=fechaSMS(t)||Date.now();o.raw=t;return o;}}
+  }
+  const m=t.match(/\$\s?([\d.,]+)/);
+  if(!m)return null;
+  const val=montoSMS(m[1]);if(!val)return null;
+  const inn=/recib|abono|consign|deposit|ingres|nomina|te (?:enviaron|transfirieron)/i.test(t);
+  return {t:inn?'in':'out',amount:val,desc:limpiaTxt(t.slice(0,45)),
+    regla:'sin identificar',ts:fechaSMS(t)||Date.now(),raw:t};
+}
+/* separa un pegado largo en mensajes sueltos */
+function partirMensajes(txt){
+  let x=String(txt).replace(/\r/g,'');
+  x=x.replace(/(?!^)(Bancolombia\s*:)/g,'\n$1');
+  return x.split(/\n{1,}/).map(l=>l.trim()).filter(l=>l.length>8);
+}
+
 /* ============ leer una captura ============ */
 let scan={items:[],src:null};
 function renderScan(){
@@ -1562,6 +1779,27 @@ function renderScan(){
   drawScan();
 }
 $('scan-src').onchange=()=>{scan.src=$('scan-src').value;};
+$('scan-read').onclick=()=>{
+  const txt=$('scan-txt').value;
+  if(!txt.trim())return toast('Pega primero los mensajes');
+  const vistos=new Set(DB.mov.map(m=>m.ref).filter(Boolean));
+  const partes=partirMensajes(txt);
+  let rep=0;
+  const items=[];
+  partes.forEach((linea,i)=>{
+    const r=interpretar(linea);
+    if(!r)return;
+    const ref='sms:'+r.amount+':'+(r.ts||0)+':'+r.desc.slice(0,18);
+    if(vistos.has(ref)){rep++;return;}
+    items.push({id:'s'+i,fecha:isoOf(new Date(r.ts)),desc:r.desc,monto:r.amount,
+      t:r.t,cat:categoriza(r.desc,r.t),on:true,regla:r.regla,ref,dst:null});
+  });
+  scan.items=items;
+  $('scan-status').textContent=items.length
+    ?'Reconocí '+items.length+' movimientos'+(rep?' ('+rep+' ya estaban registrados)':'')+'. Revisa y agrega.'
+    :(rep?'Esos '+rep+' movimientos ya estaban registrados.':'No reconocí ningún movimiento en ese texto.');
+  drawScan();
+};
 $('scan-key').onchange=async()=>{DB.cfg.apiKey=$('scan-key').value.trim();await Store.save(DB);
   toast('Clave guardada en este dispositivo');};
 $('scan-pick').onclick=()=>{
@@ -1620,7 +1858,7 @@ function drawScan(){
   const cats=CATS.out.map(([n])=>n),cin=CATS.in.map(([n])=>n);
   $('scan-res').innerHTML=scan.items.map((x,i)=>`
     <div class="ed" style="${x.on?'':'opacity:.45'}">
-      <div class="hd"><span>${x.t==='in'?'Ingreso':'Gasto'} · ${x.fecha}</span>
+      <div class="hd"><span>${x.t==='in'?'Ingreso':x.t==='move'?'Retiro':'Gasto'} · ${x.fecha}${x.regla?' · '+x.regla:''}</span>
         <button data-sc="${i}" style="color:${x.on?'var(--expense)':'var(--cta)'}">${x.on?'Quitar':'Incluir'}</button></div>
       <input data-sf="desc" data-i="${i}" value="${x.desc.replace(/"/g,'&quot;')}" placeholder="Descripción">
       <div class="duo">
@@ -1629,15 +1867,21 @@ function drawScan(){
           `<option value="${n}" ${x.cat===n?'selected':''}>${n}</option>`).join('')}</select>
       </div>
       <input data-sf="fecha" data-i="${i}" type="date" value="${x.fecha}">
+      ${x.t==='move'?`<select data-sf="dst" data-i="${i}">
+        <option value="">¿A dónde entró el efectivo?</option>
+        ${flat().filter(o=>o.id!==scan.src).map(o=>
+          `<option value="${o.id}" ${x.dst===o.id?'selected':''}>${o.n}</option>`).join('')}</select>`:''}
     </div>`).join('')
     +`<button class="btn" id="scan-add" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">
         Agregar ${scan.items.filter(x=>x.on).length} movimientos</button>`;
   $('scan-add').onclick=async()=>{
     const sel=scan.items.filter(x=>x.on&&x.monto>0);
     if(!sel.length)return toast('No hay nada seleccionado');
+    if(sel.some(x=>x.t==='move'&&!x.dst))return toast('Dile a dónde entró el efectivo del retiro');
     sel.forEach((x,n)=>{
       const m={id:'sc'+Date.now()+n,ts:isoTs(x.fecha),t:x.t,amount:x.monto,
-        src:scan.src,cat:x.cat,note:x.desc};
+        src:scan.src,cat:x.t==='move'?'Retiro en cajero':x.cat,note:x.desc,ref:x.ref};
+      if(x.t==='move')m.dst=x.dst;
       if(x.t==='out'&&isCard(scan.src))m.paidAmt=0;
       DB.mov.push(m);});
     await Store.save(DB);scan.items=[];drawScan();
@@ -1651,8 +1895,10 @@ $('scan-res').addEventListener('input',e=>{
   else if(f==='monto')x.monto=clean(t.value);
   else if(f==='fecha')x.fecha=t.value;});
 $('scan-res').addEventListener('change',e=>{
-  const t=e.target;if(t.dataset.sf!=='cat')return;
-  scan.items[+t.dataset.i].cat=t.value;});
+  const t=e.target;if(!t.dataset.sf)return;
+  if(t.dataset.sf==='cat')scan.items[+t.dataset.i].cat=t.value;
+  if(t.dataset.sf==='dst')scan.items[+t.dataset.i].dst=t.value;
+  if(t.dataset.sf==='fecha')scan.items[+t.dataset.i].fecha=t.value;});
 $('scan-res').addEventListener('click',e=>{
   const b=e.target.closest('[data-sc]');if(!b)return;
   const x=scan.items[+b.dataset.sc];x.on=!x.on;drawScan();});
@@ -1854,7 +2100,7 @@ $('pay-ok').onclick=async()=>{
 };
 
 /* ============ navegación ============ */
-const VIEWS=['home','plan','planedit','cards','stats','set','s-acc','s-card','s-fix','s-scan','s-style','s-gen','s-back'];
+const VIEWS=['home','plan','planedit','cards','stats','set','s-acc','s-card','s-fix','s-inbox','s-scan','s-style','s-gen','s-back'];
 function go(v){
   VIEWS.forEach(x=>$('v-'+x).style.display=(x===v)?'block':'none');
   const tab=v.startsWith('s-')||v==='set'?'set':(v==='planedit'?'plan':(v==='cards'?'home':v));
@@ -1865,6 +2111,7 @@ function go(v){
   if(v==='s-style')renderThemes();
   if(v==='s-fix')renderFixed();
   if(v==='s-scan')renderScan();
+  if(v==='s-inbox')renderInbox();
   if(v==='plan')renderPlan();
   window.scrollTo(0,0);
 }
@@ -2013,7 +2260,11 @@ $('cfg-cur').onchange=async()=>{DB.cfg.cur=$('cfg-cur').value;await Store.save(D
 $('cfg-budget').onchange=async()=>{DB.cfg.budget=clean($('cfg-budget').value);await Store.save(DB);render();};
 
 /* ============ datos ============ */
-function download(n,t,ty){const a=document.createElement('a');
+function download(n,t,ty){
+  if(NATIVO&&window.Android.guardarArchivo){
+    if(window.Android.guardarArchivo(n,t))return;
+  }
+  const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([t],{type:ty}));a.download=n;a.click();URL.revokeObjectURL(a.href);}
 $('exp-csv').onclick=()=>{
   const T={in:'ingreso',out:'gasto',move:'traslado',pay:'pago tarjeta',adj:'ajuste'};
@@ -2138,6 +2389,12 @@ function migrate(x){
     }
   });
   if(!DB.cfg.fixed)DB.cfg.fixed=[];
+  if(NATIVO){
+    $('mi-inbox').style.display='flex';
+    try{const pend=JSON.parse(window.Android.pendientes()||'[]');
+      if(pend.length)setTimeout(()=>toast(pend.length+' movimientos esperando en la bandeja'),900);
+    }catch(e){}
+  }
   applyTheme(DB.cfg.theme);fill();
   const nf=await runFixed();
   render();go('home');
