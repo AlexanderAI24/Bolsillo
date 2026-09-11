@@ -431,7 +431,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v17</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v18</div>
     </div>
   </section>
 
@@ -786,6 +786,21 @@ function modal(o){
   });
 }
 $('modal').onclick=e=>{if(e.target.id==='modal')$('modal').classList.remove('on');};
+/* modal con lista de opciones: devuelve el id elegido o null */
+function modalPick(o){
+  return new Promise(res=>{
+    const box=$('mbox');
+    box.innerHTML=`<h4>${o.title}</h4>${o.text?`<p>${o.text}</p>`:''}
+      <div class="mbtns">${o.options.map(x=>`<button data-p="${x.id}" style="text-align:left">
+        <span style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+          <span>${x.n}</span><span style="font-weight:700;color:var(--text)">${x.extra||''}</span></span>
+        </button>`).join('')}
+        <button data-p="">Cancelar</button></div>`;
+    $('modal').classList.add('on');
+    box.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{
+      $('modal').classList.remove('on');res(b.dataset.p||null);});
+  });
+}
 
 /* ============ refs ============ */
 const isCard=ref=>DB.cfg.cards.some(c=>c.id===ref);
@@ -856,14 +871,18 @@ function debts(){
 /* ===== ciclo de facturacion de tarjetas =====
    Una compra entra al corte del mes si se hizo hasta el dia de corte;
    si fue despues, pasa al corte siguiente. */
+const diasDe=(y,m)=>new Date(y,m+1,0).getDate();
+const clampDia=(y,m,d)=>Math.min(d,diasDe(y,m));
 function cycleOf(card,ts){
   const cut=+card.cutoff||0;if(!cut)return null;
   const dt=new Date(ts);
-  let cm=dt.getMonth(),cy=dt.getFullYear();
-  if(dt.getDate()>cut)cm++;
-  const close=new Date(cy,cm,cut,23,59,59);
+  let cy=dt.getFullYear(),cm=dt.getMonth();
+  if(dt.getDate()>clampDia(cy,cm,cut)){cm++;if(cm>11){cm=0;cy++;}}
+  const close=new Date(cy,cm,clampDia(cy,cm,cut),23,59,59);
   const due=+card.due||cut;
-  const pay=new Date(close.getFullYear(),close.getMonth()+(due<=cut?1:0),due,23,59,59);
+  let py=close.getFullYear(),pm=close.getMonth()+(due<=cut?1:0);
+  if(pm>11){pm-=12;py++;}
+  const pay=new Date(py,pm,clampDia(py,pm,due),23,59,59);
   return {close,pay,key:mkey(close)};
 }
 const DFMT=dt=>dt.getDate()+' '+MO[dt.getMonth()].toLowerCase().slice(0,3)+' '+dt.getFullYear();
@@ -1208,10 +1227,10 @@ $('p-copy').onclick=async()=>{
 $('p-all').onclick=async()=>{
   if(!DB.cfg.accounts.length)return toast('Primero crea una cuenta');
   const P=getPlan(null,true);
-  const pend=P.items.filter(it=>!it.done&&it.amount>0);
-  if(!pend.length&&P.incomeDone)return toast('Ya está todo marcado');
-  const apart=pend.filter(x=>x.kind==='pocket').reduce((s,x)=>s+x.amount,0);
-  const pag=pend.filter(x=>x.kind!=='pocket').reduce((s,x)=>s+x.amount,0);
+  const faltan=P.items.filter(it=>!it.done&&it.amount>0);
+  if(!faltan.length&&P.incomeDone)return toast('Ya está todo marcado');
+  const apart=faltan.filter(x=>x.kind==='pocket').reduce((s,x)=>s+x.amount,0);
+  const pag=faltan.filter(x=>x.kind!=='pocket').reduce((s,x)=>s+x.amount,0);
   const r=await modal({title:'Marcar todo el plan',
     text:`Se aplican <b>${pend.length}</b> conceptos de ${mlabel(pcur).toLowerCase()}:
       ${money(apart)} a bolsillos y ${money(pag)} en pagos.
@@ -1225,7 +1244,7 @@ $('p-all').onclick=async()=>{
       note:'Nómina '+mlabel(pcur),plan:1});
     P.incomeDone=true;P.incomeMovId=iid;
   }
-  pend.forEach((it,n)=>{
+  faltan.forEach((it,n)=>{
     const id=Date.now()+''+n+Math.floor(Math.random()*999)+'b';
     const m={id,ts,amount:it.amount,src:P.src,note:it.name,plan:1};
     if(it.kind==='pocket'&&it.target){m.t='move';m.dst=it.target;m.cat='Apartado';}
@@ -1399,6 +1418,18 @@ async function delMov(id){
   const gone=DB.mov.find(m=>m.id===id);
   if(gone&&gone.t==='pay'&&gone.alloc)gone.alloc.forEach(a=>{
     const t=DB.mov.find(m=>m.id===a.id);if(t)t.paidAmt=Math.max(0,(t.paidAmt||0)-a.amt);});
+  /* si se borra una compra que ya tenia abonos, se recorta el pago asociado */
+  if(gone&&gone.t==='out'&&isCard(gone.src)){
+    DB.mov.forEach(pg=>{
+      if(pg.t!=='pay'||!pg.alloc)return;
+      const k=pg.alloc.findIndex(a=>a.id===gone.id);
+      if(k<0)return;
+      pg.amount=Math.max(0,pg.amount-pg.alloc[k].amt);
+      pg.alloc.splice(k,1);});
+    DB.mov=DB.mov.filter(pg=>!(pg.t==='pay'&&pg.alloc&&!pg.alloc.length&&pg.amount<=0.009));
+  }
+  /* y su traslado de respaldo, si lo tenia */
+  if(gone&&gone.resMovId)DB.mov=DB.mov.filter(m=>m.id!==gone.resMovId);
   DB.mov=DB.mov.filter(m=>m.id!==id);
   Object.values(DB.cfg.plans).forEach(p=>{
     p.items.forEach(it=>{if(it.movId===id||it.adjId===id){it.done=false;it.movId=null;it.adjId=null;}});
@@ -1512,6 +1543,8 @@ $('save').onclick=async()=>{
   if(d.t==='out'&&isCard(m.src)){if(m.paidAmt===undefined)m.paidAmt=0;}
   else{delete m.paidAmt;delete m.res;}
   if(!prev)DB.mov.push(m);
+  else if(prev.plan)Object.values(DB.cfg.plans).forEach(P=>
+    P.items.forEach(it=>{if(it.movId===prev.id){it.amount=val;it.name=m.note||it.name;}}));
   await Store.save(DB);
   cursor=new Date(ts);cursor.setDate(1);
   const era=!!prev;d.editId=null;
@@ -1681,8 +1714,12 @@ async function runFixed(){
   const hoy=new Date(),k=mkey(hoy);let n=0;
   R.forEach(r=>{
     if(!r.amount||r.last===k)return;
-    if(hoy.getDate()<(r.day||1))return;
-    const dia=Math.min(r.day||1,new Date(hoy.getFullYear(),hoy.getMonth()+1,0).getDate());
+    /* la cuenta debe existir todavia */
+    const ok=isCard(r.src)||resolve(r.src).kind!=='gone';
+    if(!ok)return;
+    /* si el dia no existe en este mes (31 en abril) se usa el ultimo */
+    const dia=clampDia(hoy.getFullYear(),hoy.getMonth(),r.day||1);
+    if(hoy.getDate()<dia)return;
     const ts=new Date(hoy.getFullYear(),hoy.getMonth(),dia,12).getTime();
     const m={id:'fx'+Date.now()+n,ts,t:r.t==='in'?'in':'out',amount:r.amount,
       src:r.src,cat:r.cat||'Otro',note:r.name,fixed:1};
@@ -1697,7 +1734,8 @@ let pay={card:null,mode:'sel',src:null,sel:{},amt:''};
 function openPay(cardId){
   const c=DB.cfg.cards.find(x=>x.id===cardId);if(!c)return;
   const F=flat();if(!F.length)return toast('Primero crea una cuenta');
-  pay={card:c,mode:'sel',src:F[0].id,sel:{},amt:''};
+  const sug=(c.pocket&&F.some(x=>x.id===c.pocket))?c.pocket:F[0].id;
+  pay={card:c,mode:'sel',src:sug,sel:{},amt:''};
   $('pay-card').textContent=c.name;$('pay-cur').textContent=SYM[DB.cfg.cur];
   syncPay();$('paysheet').classList.add('open');$('paysheet').scrollTop=0;
 }
@@ -1729,8 +1767,7 @@ function syncPay(){
     $('pay-list').querySelectorAll('[data-res]').forEach(b=>b.onclick=async ev=>{
       ev.stopPropagation();
       const m=DB.mov.find(x=>x.id===b.dataset.res);if(!m)return;
-      m.res=!m.res;await Store.save(DB);syncPay();render();
-      toast(m.res?'Ya guardaste esa plata en un bolsillo':'Marcada como sin guardar');});
+      await toggleRes(m);});
   }else{
     $('pay-list').innerHTML=`<div class="hint" style="margin-top:4px">
       Escribe cuánto vas a pagar. Se abona a las compras más antiguas primero,
@@ -1753,6 +1790,45 @@ function syncPay(){
     ?(pay.amt?pay.amt.replace(/^(\d+)/,x=>grp(x)):'0'):fmt(t);
   $('pay-ok').disabled=!(t>0&&pay.src);
 }
+async function toggleRes(m){
+  const card=DB.cfg.cards.find(c=>c.id===m.src);if(!card)return;
+  /* desmarcar: se deshace el traslado que hizo la app */
+  if(m.res){
+    if(m.resMovId)DB.mov=DB.mov.filter(x=>x.id!==m.resMovId);
+    m.res=false;m.resMovId=null;
+    await Store.save(DB);syncPay();render();
+    toast(m.resMovId===null?'Se deshizo el apartado':'Marcada como sin guardar');return;}
+
+  const destino=card.pocket&&resolve(card.pocket).kind!=='gone'?card.pocket:null;
+  if(!destino){
+    const r=await modal({title:'Falta el bolsillo de '+card.name,
+      text:'Asígnale un bolsillo a esta tarjeta y la app moverá la plata sola cada vez que marques una compra.',
+      ok:'Asignar bolsillo ahora',alt:'Solo marcarla, sin mover plata'});
+    if(r.action==='cancel')return;
+    if(r.action==='ok'){$('paysheet').classList.remove('open');go('s-card');return;}
+    m.res=true;m.resMovId=null;await Store.save(DB);syncPay();render();
+    toast('Marcada, pero sin mover plata');return;}
+
+  const B=balances(),monto=pend(m);
+  const ops=flat().filter(x=>x.id!==destino)
+    .map(x=>({id:x.id,n:x.n,extra:money(B.bal[x.id]||0)}));
+  if(!ops.length)return toast('No hay de dónde sacar la plata');
+  const origen=await modalPick({title:'¿De dónde sale la plata?',
+    text:`Se van a apartar <b>${money(monto)}</b> hacia ${resolve(destino).name}, el bolsillo de ${card.name}.`,
+    options:ops});
+  if(!origen)return;
+  if((B.bal[origen]||0)<monto){
+    const r=await modal({title:'No alcanza',
+      text:`${nameOf(origen)} tiene ${money(B.bal[origen]||0)} y necesitas ${money(monto)}. ¿Lo hago igual?`,
+      ok:'Hacerlo igual'});
+    if(r.action!=='ok')return;}
+  const id='rs'+Date.now()+Math.floor(Math.random()*99);
+  DB.mov.push({id,ts:Date.now(),t:'move',src:origen,dst:destino,amount:monto,
+    cat:'Apartado',note:'Respaldo '+card.name});
+  m.res=true;m.resMovId=id;
+  await Store.save(DB);syncPay();render();
+  toast(money(monto)+' apartados en '+resolve(destino).name);
+}
 $('pay-mode').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;pay.mode=b.dataset.m;syncPay();};
 $('pay-src').onclick=e=>{const b=e.target.closest('[data-ps]');if(!b)return;pay.src=b.dataset.ps;syncPay();};
 $('pay-close').onclick=()=>$('paysheet').classList.remove('open');
@@ -1761,7 +1837,8 @@ $('pay-ok').onclick=async()=>{
   const alloc=[];
   if(pay.mode==='sel'){
     cardBuys(pay.card.id).filter(m=>pay.sel[m.id]).forEach(m=>{
-      const x=pend(m);m.paidAmt=(m.paidAmt||0)+x;m.res=false;alloc.push({id:m.id,amt:x});});
+      const x=pend(m);m.paidAmt=(m.paidAmt||0)+x;m.res=false;m.resMovId=null;
+      alloc.push({id:m.id,amt:x});});
   }else{
     let rest=total;
     for(const m of cardBuys(pay.card.id)){
@@ -1887,6 +1964,12 @@ function renderCardEdit(){
         <input data-f="due" data-i="${i}" type="number" min="1" max="31" inputmode="numeric"
           value="${c.due||''}" placeholder="ej. 30">
       </div>
+      <div class="dlbl" style="margin-top:8px"><span>Bolsillo donde guardas la plata de esta tarjeta</span></div>
+      <select data-f="pocket" data-i="${i}">
+        <option value="">Ninguno</option>
+        ${flat().filter(x=>x.id.includes(':')).map(x=>
+          `<option value="${x.id}" ${c.pocket===x.id?'selected':''}>${x.n}</option>`).join('')}
+      </select>
       ${c.cutoff?`<div class="hint" style="margin:2px 0 0">Compras hasta el ${c.cutoff} se pagan el
         ${c.due||c.cutoff} ${(+c.due||+c.cutoff)<=+c.cutoff?'del mes siguiente':'de ese mismo mes'}.</div>`:''}
       <div class="swatches">${GRADS.map((g,gi)=>`<button class="sw ${c.g===gi?'on':''}" data-g="${gi}" data-i="${i}"
@@ -1897,9 +1980,11 @@ async function cardField(t){
   const f=t.dataset.f;
   if(f==='name')c.name=t.value;
   else if(f==='limit')c.limit=clean(t.value);
+  else if(f==='pocket')c.pocket=t.value||null;
   else{const n=parseInt(t.value,10);c[f]=(n>=1&&n<=31)?n:null;}
   await Store.save(DB);render();}
 $('cardedit').addEventListener('input',e=>{if(e.target.tagName==='INPUT')cardField(e.target);});
+$('cardedit').addEventListener('change',e=>{if(e.target.tagName==='SELECT')cardField(e.target);});
 $('cardedit').addEventListener('click',async e=>{
   const g=e.target.closest('[data-g]');
   if(g){DB.cfg.cards[+g.dataset.i].g=+g.dataset.g;await Store.save(DB);renderCardEdit();render();return;}
