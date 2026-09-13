@@ -44,7 +44,9 @@ object Inbox {
         })
         guardar(c, KEY_LOG, log)
 
-        if (!PLATA.containsMatchIn(completo)) return false
+        // las capturas traen la pantalla entera; se guardan completas
+        if (origen != "captura" && origen != "compartido" &&
+            !PLATA.containsMatchIn(completo)) return false
 
         val bandeja = leer(c, KEY)
         // evita repetidos: mismo texto en los ultimos 5 minutos

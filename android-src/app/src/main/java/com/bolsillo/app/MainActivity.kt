@@ -8,11 +8,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.provider.Settings
 import android.webkit.*
 import android.widget.Toast
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 
 class MainActivity : Activity() {
@@ -37,7 +34,6 @@ class MainActivity : Activity() {
             domStorageEnabled = true
             databaseEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
-            mediaPlaybackRequiresUserGesture = false
             useWideViewPort = true
             loadWithOverviewMode = true
         }
@@ -48,31 +44,75 @@ class MainActivity : Activity() {
             override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean {
                 val u = r.url.toString()
                 if (u.startsWith("http") && u.contains("alexanderai24.github.io")) return false
-                startActivity(Intent(Intent.ACTION_VIEW, r.url))
-                return true
+                startActivity(Intent(Intent.ACTION_VIEW, r.url)); return true
             }
             override fun onReceivedError(v: WebView, req: WebResourceRequest, err: WebResourceError) {
-                if (req.isForMainFrame) {
-                    Toast.makeText(this@MainActivity,
-                        "Sin conexión. Abre la app una vez con internet para guardarla.",
-                        Toast.LENGTH_LONG).show()
-                }
+                if (req.isForMainFrame) Toast.makeText(this@MainActivity,
+                    "Sin conexión. Ábrela una vez con internet para guardarla.",
+                    Toast.LENGTH_LONG).show()
             }
         }
         web.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(v: WebView, cb: ValueCallback<Array<Uri>>,
                                            p: FileChooserParams): Boolean {
-                subirArchivo?.onReceiveValue(null)
-                subirArchivo = cb
-                return try {
-                    startActivityForResult(p.createIntent(), PEDIR_ARCHIVO); true
-                } catch (e: Exception) { subirArchivo = null; false }
+                subirArchivo?.onReceiveValue(null); subirArchivo = cb
+                return try { startActivityForResult(p.createIntent(), PEDIR_ARCHIVO); true }
+                catch (e: Exception) { subirArchivo = null; false }
             }
         }
-        web.load()
+        web.loadUrl(URL)
+        recibirCompartido(intent)
     }
 
-    private fun WebView.load() = loadUrl(URL)
+    override fun onNewIntent(i: Intent?) {
+        super.onNewIntent(i)
+        setIntent(i)
+        recibirCompartido(i)
+    }
+
+    /** Lo que llega cuando compartes un pantallazo o un texto hacia Bolsillo. */
+    private fun recibirCompartido(i: Intent?) {
+        if (i == null) return
+        val accion = i.action ?: return
+        if (accion != Intent.ACTION_SEND && accion != Intent.ACTION_SEND_MULTIPLE) return
+
+        val tipo = i.type ?: ""
+        if (tipo.startsWith("text/")) {
+            val t = i.getStringExtra(Intent.EXTRA_TEXT) ?: return
+            Inbox.agregar(applicationContext, "compartido", "Texto compartido", "", t)
+            avisar("Texto recibido")
+            refrescar()
+            return
+        }
+        if (!tipo.startsWith("image/")) return
+
+        val imagenes = mutableListOf<Uri>()
+        if (accion == Intent.ACTION_SEND) {
+            (i.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))?.let { imagenes.add(it) }
+        } else {
+            i.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { imagenes.addAll(it) }
+        }
+        if (imagenes.isEmpty()) return
+
+        Toast.makeText(this, "Leyendo la captura...", Toast.LENGTH_SHORT).show()
+        var faltan = imagenes.size
+        for (u in imagenes) {
+            Lector.leer(applicationContext, u) { texto ->
+                if (!texto.isNullOrBlank())
+                    Inbox.agregar(applicationContext, "captura", "Captura", "", texto)
+                faltan--
+                if (faltan <= 0) { avisar("Captura leída"); refrescar() }
+            }
+        }
+    }
+
+    private fun avisar(t: String) = runOnUiThread {
+        Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun refrescar() = runOnUiThread {
+        web.evaluateJavascript("window.onMensajesNuevos && window.onMensajesNuevos();", null)
+    }
 
     override fun onActivityResult(req: Int, res: Int, data: Intent?) {
         super.onActivityResult(req, res, data)
@@ -82,56 +122,16 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onBackPressed() {
-        if (web.canGoBack()) web.goBack() else super.onBackPressed()
-    }
+    override fun onBackPressed() { if (web.canGoBack()) web.goBack() else super.onBackPressed() }
 
-    override fun onResume() {
-        super.onResume()
-        // avisa a la app web que revise si llegaron mensajes nuevos
-        web.evaluateJavascript("window.onMensajesNuevos && window.onMensajesNuevos();", null)
-    }
+    override fun onResume() { super.onResume(); refrescar() }
 
-    /** Puente entre Kotlin y la app web */
     inner class Puente {
-
         @JavascriptInterface fun esNativo(): Boolean = true
-
         @JavascriptInterface fun pendientes(): String = Inbox.pendientes(applicationContext)
-
         @JavascriptInterface fun registro(): String = Inbox.registro(applicationContext)
-
         @JavascriptInterface fun consumir(ids: String) = Inbox.consumir(applicationContext, ids)
-
         @JavascriptInterface fun limpiar(todo: Boolean) = Inbox.limpiar(applicationContext, todo)
-
-        @JavascriptInterface fun permisoNotificaciones(): Boolean {
-            val activos = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-            return activos != null && activos.contains(packageName)
-        }
-
-        @JavascriptInterface fun abrirPermisoNotificaciones() {
-            runOnUiThread {
-                try {
-                    startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
-                } catch (e: Exception) {
-                    startActivity(Intent(Settings.ACTION_SETTINGS))
-                }
-            }
-        }
-
-        /** Lee correos del banco por IMAP. Solo trae los de remitentes autorizados. */
-        @JavascriptInterface fun leerCorreo(host: String, puerto: Int, usuario: String,
-                                            clave: String, carpeta: String,
-                                            remitentesJson: String, dias: Int): Int {
-            return try {
-                val permitidos = mutableListOf<String>()
-                val a = JSONArray(remitentesJson)
-                for (i in 0 until a.length()) permitidos.add(a.getString(i).lowercase())
-                Correo.leer(applicationContext, host, puerto, usuario, clave,
-                    carpeta, permitidos, dias)
-            } catch (e: Exception) { -1 }
-        }
 
         /** Guarda los respaldos en la carpeta Descargas. */
         @JavascriptInterface fun guardarArchivo(nombre: String, contenido: String): Boolean {
@@ -142,23 +142,18 @@ class MainActivity : Activity() {
                         put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
                         put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                     }
-                    val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v)
-                        ?: return false
+                    val uri = contentResolver.insert(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, v) ?: return false
                     contentResolver.openOutputStream(uri)?.use { it.write(contenido.toByteArray()) }
                 } else {
-                    val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    val dir = Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS)
                     File(dir, nombre).writeText(contenido)
                 }
-                runOnUiThread {
-                    Toast.makeText(this@MainActivity, "Guardado en Descargas: $nombre",
-                        Toast.LENGTH_LONG).show()
-                }
-                true
+                avisar("Guardado en Descargas: $nombre"); true
             } catch (e: Exception) { false }
         }
 
-        @JavascriptInterface fun aviso(texto: String) {
-            runOnUiThread { Toast.makeText(this@MainActivity, texto, Toast.LENGTH_SHORT).show() }
-        }
+        @JavascriptInterface fun aviso(texto: String) = avisar(texto)
     }
 }
