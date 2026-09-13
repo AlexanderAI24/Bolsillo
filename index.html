@@ -437,7 +437,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v22</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v27</div>
     </div>
   </section>
 
@@ -456,7 +456,9 @@ section{position:relative;}
     <div class="h" style="padding-top:10px"><div class="eyebrow">Tarjetas de crédito</div></div>
     <div class="set"><div id="cardedit"></div>
       <button class="btn" id="addcard">Agregar tarjeta</button>
-      <div class="hint" style="padding-bottom:24px">Pon el día de corte y el de pago para que la app sepa
+      <div class="hint" style="padding-bottom:24px">Los últimos 4 dígitos sirven para que la app
+        reconozca sola de qué tarjeta es cada captura, sobre todo si usas Google Pay.
+        Pon el día de corte y el de pago para que la app sepa
         qué compras entran a la factura de este mes y cuáles pasan a la siguiente.
         El cupo es opcional: si lo pones, ves cuánto tienes libre.</div></div>
   </section>
@@ -478,8 +480,7 @@ section{position:relative;}
       <label>Movimientos detectados</label>
       <div id="inb-status" class="hint" style="margin-top:0"></div>
       <div id="inb-list"></div>
-      <label>Correo del banco</label>
-      <div id="mail-cfg"></div>
+
       <label>Modo aprendizaje</label>
       <button class="btn" id="inb-log">Ver lo que ha capturado</button>
       <div id="inb-logbox"></div>
@@ -495,9 +496,11 @@ section{position:relative;}
       <label>Dónde se hicieron esos movimientos</label>
       <select id="scan-src"></select>
       <label>Pegar mensajes del banco</label>
-      <textarea id="scan-txt" rows="5" placeholder="Pega aquí uno o varios SMS o notificaciones. Puedes pegar muchos de una vez."></textarea>
+      <textarea id="scan-txt" rows="5" placeholder="Pega mensajes del banco, la lista de movimientos de Nu, BBVA o Google Pay, o tus bolsillos de Bancolombia."></textarea>
       <button class="btn" id="scan-read" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">Interpretar mensajes</button>
-      <div class="hint">Funciona sin conexión y sin clave: la app entiende los formatos de Bancolombia.</div>
+      <div class="hint">Funciona sin conexión y sin clave. Entiende los SMS de Bancolombia y las
+        listas de movimientos de Nu, BBVA y Google Pay. Recuerda las categorías que ya asignaste
+        a cada comercio.</div>
       <label>O leer una imagen</label>
       <button class="btn" id="scan-pick">Elegir captura de pantalla</button>
       <input type="file" id="scan-file" accept="image/*" style="display:none">
@@ -846,18 +849,24 @@ function resolve(ref){
   return{kind:'pocket',name:p.name,full:a.name+' · '+p.name,color:ACOLORS[a.color%ACOLORS.length],acc:a,pk:p};
 }
 const nameOf=r=>resolve(r).full;
+/* los bolsillos se muestran de mayor a menor saldo */
+function pocketsOrd(a,B){
+  B=B||balances();
+  return [...a.pockets].sort((x,y)=>
+    (B.bal[a.id+':'+y.id]||0)-(B.bal[a.id+':'+x.id]||0));
+}
 function flat(){
-  const out=[];
+  const out=[],B=balances();
   DB.cfg.accounts.forEach(a=>{
     const c=ACOLORS[a.color%ACOLORS.length];
     out.push({id:a.id,n:a.pockets.length?a.name+' · Disponible':a.name,c});
-    a.pockets.forEach(p=>out.push({id:a.id+':'+p.id,n:a.name+' · '+p.name,c}));});
+    pocketsOrd(a,B).forEach(p=>out.push({id:a.id+':'+p.id,n:a.name+' · '+p.name,c}));});
   return out;
 }
 function pocketsOf(aid){
   const a=DB.cfg.accounts.find(x=>x.id===aid);if(!a)return[];
   const c=ACOLORS[a.color%ACOLORS.length];
-  return [{id:'',n:'Disponible',c}].concat(a.pockets.map(p=>({id:p.id,n:p.name,c})));
+  return [{id:'',n:'Disponible',c}].concat(pocketsOrd(a).map(p=>({id:p.id,n:p.name,c})));
 }
 
 /* ============ cálculos ============ */
@@ -994,7 +1003,7 @@ function render(){
       ${a.pockets.length?`<div class="pk">
         <div class="pkr"><span class="lbl">Disponible</span>
           <b class="num" ${B.bal[a.id]<0?'style="color:var(--expense)"':''}>${money(B.bal[a.id]||0)}</b></div>
-        ${a.pockets.map(p=>`<div class="pkr"><span class="lbl">${p.name}</span>
+        ${pocketsOrd(a,B).map(p=>`<div class="pkr"><span class="lbl">${p.name}</span>
           <b class="num">${money(B.bal[a.id+':'+p.id]||0)}</b></div>`).join('')}</div>`:''}</div>`;}).join('');
   document.querySelectorAll('.acc .hd').forEach(b=>b.onclick=()=>{
     const id=b.parentElement.dataset.acc;openAcc[id]=!openAcc[id];render();});
@@ -1609,17 +1618,11 @@ const NATIVO=(()=>{try{return !!(window.Android&&window.Android.esNativo&&window
 let bandeja=[];
 function renderInbox(){
   if(!NATIVO){$('inb-status').textContent='Esta pantalla solo funciona dentro de la app instalada.';return;}
-  const okN=window.Android.permisoNotificaciones();
   $('inb-perm').innerHTML=`
-    <label style="margin-top:4px">Permisos</label>
-    <div class="ed"><div class="hd"><span>Leer notificaciones</span>
-      <span style="color:${okN?'var(--income)':'var(--expense)'};font-size:12px;font-weight:700">
-        ${okN?'Activo':'Apagado'}</span></div>
-      <div class="hint" style="margin:0 0 8px">Para capturar compras de Nu, BBVA y Google Pay.</div>
-      ${okN?'':'<button class="mini" id="perm-n">Activar en ajustes de Android</button>'}</div>
-    `;
-  if($('perm-n'))$('perm-n').onclick=()=>window.Android.abrirPermisoNotificaciones();
-  renderCorreo();
+    <div class="hint" style="margin:4px 0 0">Comparte hacia Bolsillo un pantallazo de tus
+      movimientos, o el texto de un mensaje del banco. La app lee el contenido dentro del
+      celular, sin enviarlo a ninguna parte.</div>`;
+  const _viejo="";
   cargarBandeja();
 }
 function cargarBandeja(){
@@ -1628,14 +1631,27 @@ function cargarBandeja(){
   try{crudos=JSON.parse(window.Android.pendientes()||'[]');}catch(e){}
   const vistos=new Set(DB.mov.map(m=>m.ref).filter(Boolean));
   bandeja=[];let ya=0,sin=0;
+  for(const c of crudos){
+    const res=interpretarTexto(c.texto);
+    if(res.length&&esCapturaSaldos(c.texto,res)){
+      prepararSaldos(res);
+      $('inb-status').textContent='Esa captura trae '+res.length+' bolsillos con su saldo.';
+      dibujarSaldos('inb-list');
+      try{window.Android.consumir(JSON.stringify([c.id]));}catch(e){}
+      return;}
+  }
   crudos.forEach(c=>{
-    const r=interpretar(c.texto);
-    if(!r){sin++;return;}
-    const ref='sms:'+r.amount+':'+(r.ts||0)+':'+r.desc.slice(0,18);
-    if(vistos.has(ref)){ya++;return;}
-    bandeja.push({id:c.id,app:c.app,fecha:isoOf(new Date(r.ts||c.ts)),desc:r.desc,
-      monto:r.amount,t:r.t,cat:categoriza(r.desc,r.t),regla:r.regla,ref,
-      src:(flat()[0]||{}).id,dst:null,raw:c.texto});
+    const res=interpretarTexto(c.texto);
+    if(!res.length){sin++;return;}
+    res.forEach((r,k)=>{
+      const ref='sms:'+r.monto+':'+r.fecha+':'+comercio(r.desc).slice(0,18);
+      if(vistos.has(ref)){ya++;return;}
+      const o=detectarOrigen(c.texto);
+      bandeja.push({id:c.id,idx:k,app:c.app,fecha:r.fecha,desc:r.desc,
+        monto:r.monto,t:r.t,cat:categoriaDe(r.desc,r.t),regla:r.regla,ref,
+        src:(typeof o==='string')?o:(flat()[0]||{}).id,dst:null,pagoDesde:(flat()[0]||{}).id,
+        raw:c.texto.slice(0,80)});
+    });
   });
   $('inb-status').textContent=bandeja.length
     ?bandeja.length+' por revisar'+(ya?' · '+ya+' ya estaban':'')
@@ -1648,7 +1664,7 @@ function drawInbox(){
   const cats=CATS.out.map(([n])=>n),cin=CATS.in.map(([n])=>n);
   $('inb-list').innerHTML=bandeja.map((x,i)=>`
     <div class="ed">
-      <div class="hd"><span>${x.app} · ${x.t==='in'?'Ingreso':x.t==='move'?'Retiro':'Gasto'}</span>
+      <div class="hd"><span>${x.app} · ${x.t==='in'?'Ingreso':x.t==='move'?'Retiro':x.t==='pay'?'Pago de tarjeta':'Gasto'}</span>
         <button data-ib="${i}">Descartar</button></div>
       <input data-if="desc" data-i="${i}" value="${x.desc.replace(/"/g,'&quot;')}">
       <div class="duo">
@@ -1661,6 +1677,8 @@ function drawInbox(){
         <select data-if="src" data-i="${i}">${F.map(o=>
           `<option value="${o.id}" ${x.src===o.id?'selected':''}>${o.n}</option>`).join('')}</select>
       </div>
+      ${x.t==='pay'?`<select data-if="pagoDesde" data-i="${i}">
+        ${flat().map(o=>`<option value="${o.id}" ${x.pagoDesde===o.id?'selected':''}>Pagado desde ${o.n}</option>`).join('')}</select>`:''}
       ${x.t==='move'?`<select data-if="dst" data-i="${i}">
         <option value="">¿A dónde entró el efectivo?</option>
         ${flat().filter(o=>o.id!==x.src).map(o=>
@@ -1674,12 +1692,17 @@ function drawInbox(){
     if(bandeja.some(x=>x.t==='move'&&!x.dst))return toast('Falta decir a dónde entró el efectivo');
     const ids=[];
     bandeja.forEach((x,n)=>{
+      if(x.t==='pay'){
+        DB.mov.push({id:'in'+Date.now()+n,ts:isoTs(x.fecha),t:'pay',amount:x.monto,
+          src:x.pagoDesde,dst:x.src,cat:'Pago tarjeta',note:x.desc,ref:x.ref,alloc:[]});
+        ids.push(x.id);return;}
       const m={id:'in'+Date.now()+n,ts:isoTs(x.fecha),t:x.t,amount:x.monto,
         src:x.src,cat:x.t==='move'?'Retiro en cajero':x.cat,note:x.desc,ref:x.ref};
       if(x.t==='move')m.dst=x.dst;
       if(x.t==='out'&&isCard(x.src))m.paidAmt=0;
+      aprender(x.desc,x.cat);
       DB.mov.push(m);ids.push(x.id);});
-    try{window.Android.consumir(JSON.stringify(ids));}catch(e){}
+    try{window.Android.consumir(JSON.stringify([...new Set(ids)]));}catch(e){}
     await Store.save(DB);cargarBandeja();render();
     toast('Se registraron '+ids.length+' movimientos');};
 }
@@ -1689,7 +1712,7 @@ $('inb-list').addEventListener('input',e=>{
   else if(t.dataset.if==='monto')x.monto=clean(t.value);});
 $('inb-list').addEventListener('change',e=>{
   const t=e.target;if(!t.dataset.if)return;const x=bandeja[+t.dataset.i];
-  if(['cat','fecha','src','dst'].includes(t.dataset.if)){x[t.dataset.if]=t.value;
+  if(['cat','fecha','src','dst','pagoDesde'].includes(t.dataset.if)){x[t.dataset.if]=t.value;
     if(t.dataset.if==='src')drawInbox();}});
 $('inb-list').addEventListener('click',e=>{
   const b=e.target.closest('[data-ib]');if(!b)return;
@@ -1697,46 +1720,7 @@ $('inb-list').addEventListener('click',e=>{
   try{window.Android.consumir(JSON.stringify([x.id]));}catch(err){}
   bandeja.splice(+b.dataset.ib,1);drawInbox();
   $('inb-status').textContent=bandeja.length+' por revisar';});
-function renderCorreo(){
-  const c=DB.cfg.correo||{};
-  $('mail-cfg').innerHTML=`
-    <div class="ed">
-      <input id="mc-user" value="${c.usuario||''}" placeholder="Correo (el de la cuenta dedicada)">
-      <input id="mc-pass" type="password" value="${c.clave||''}" placeholder="Contraseña de aplicación">
-      <div class="duo">
-        <select id="mc-prov">
-          <option value="gmail" ${c.prov!=='outlook'?'selected':''}>Gmail</option>
-          <option value="outlook" ${c.prov==='outlook'?'selected':''}>Outlook</option>
-        </select>
-        <input id="mc-carpeta" value="${c.carpeta||'INBOX'}" placeholder="Carpeta">
-      </div>
-      <input id="mc-de" value="${(c.remitentes||['bancolombia','bbva']).join(', ')}"
-        placeholder="Remitentes permitidos, separados por coma">
-      <div class="hint" style="margin:2px 0 8px">Solo se leen correos de esos remitentes.
-        La clave se queda en este celular.</div>
-      <div class="duo">
-        <button class="mini" id="mc-save" style="border-style:solid">Guardar</button>
-        <button class="mini" id="mc-read" style="border-style:solid;color:var(--cta)">Revisar correo</button>
-      </div>
-    </div>`;
-  $('mc-save').onclick=async()=>{
-    DB.cfg.correo={usuario:$('mc-user').value.trim(),clave:$('mc-pass').value.trim(),
-      prov:$('mc-prov').value,carpeta:$('mc-carpeta').value.trim()||'INBOX',
-      remitentes:$('mc-de').value.split(',').map(x=>x.trim()).filter(Boolean)};
-    await Store.save(DB);toast('Datos del correo guardados');};
-  $('mc-read').onclick=()=>{
-    const k=DB.cfg.correo;
-    if(!k||!k.usuario||!k.clave)return toast('Primero guarda el correo y la clave');
-    const host=k.prov==='outlook'?'outlook.office365.com':'imap.gmail.com';
-    $('inb-status').textContent='Revisando el correo...';
-    setTimeout(()=>{
-      const n=window.Android.leerCorreo(host,993,k.usuario,k.clave,k.carpeta||'INBOX',
-        JSON.stringify(k.remitentes||[]),30);
-      if(n===-2)$('inb-status').textContent='El correo o la clave no sirven. Recuerda que va la contraseña de aplicación, no la normal.';
-      else if(n<0)$('inb-status').textContent='No se pudo conectar. Revisa la conexión y el proveedor.';
-      else{toast('Se revisaron '+n+' correos nuevos');cargarBandeja();}
-    },50);};
-}
+
 $('inb-log').onclick=()=>{
   if(!NATIVO)return;
   let r=[];try{r=JSON.parse(window.Android.registro()||'[]');}catch(e){}
@@ -1811,6 +1795,194 @@ function interpretar(texto){
   return {t:inn?'in':'out',amount:val,desc:limpiaTxt(t.slice(0,45)),
     regla:'sin identificar',ts:fechaSMS(t)||Date.now(),raw:t};
 }
+/* ===== intérprete de LISTAS de movimientos (Nu, BBVA, Google Pay) ===== */
+const MESLISTA={ene:0,enero:0,feb:1,febrero:1,mar:2,marzo:2,abr:3,abril:3,may:4,mayo:4,
+ jun:5,junio:5,jul:6,julio:6,ago:7,agosto:7,sep:8,sept:8,septiembre:8,
+ oct:9,octubre:9,nov:10,noviembre:10,dic:11,diciembre:11};
+const RE_MONTO=/(?:COP|\$)\s*(-?\s*[\d][\d.,]*)/i;
+const RE_FECHALISTA=/^(\d{1,2})\s+(?:de\s+)?([a-záéíóúA-ZÁÉÍÓÚ]{3,12})\.?(?:\s+(?:de\s+)?(\d{4}))?$/;
+/* ruido que va en medio de un movimiento: se salta sin perder la descripción */
+const RUIDO_LINEA=/^(pendiente|aprobad[oa]|a \d+ meses?|\d{1,2}:\d{2}(:\d{2})?)$/i;
+/* ruido de encabezado: corta lo que se venía acumulando */
+const RUIDO_BLOQUE=/^(volver|explorar|tarjetas|[úu]ltimos movimientos|buscar|revisa tu resumen|lleg[oó] tu fecha|ya puedes ver|mastercard|visa|tu cupo|disponible|usado|resumen|per[ií]odo|fecha de corte|fecha l[ií]mite|(tus|mis) bolsillos|ocultar saldos|crear bolsillo|inicio|transacciones|tr[áa]mites|ajustes|hola,)/i;
+function fechaLista(l){
+  const m=l.match(RE_FECHALISTA);if(!m)return null;
+  const k=MESLISTA[m[2].toLowerCase().replace(/\.$/,'')];
+  if(k===undefined)return null;
+  const hoy=new Date();let y=m[3]?+m[3]:hoy.getFullYear();
+  const d=new Date(y,k,+m[1],12);
+  if(!m[3]&&d.getTime()-hoy.getTime()>15*86400000)d.setFullYear(y-1);
+  return d;
+}
+const comercio=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .replace(/[*].*$/,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim().slice(0,28);
+function parseLista(texto){
+  const lineas=String(texto).split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const items=[];let cab=null,buf=[],ultimo=null,desdeAmt=0;
+  for(const l of lineas){
+    if(RUIDO_LINEA.test(l))continue;
+    if(RUIDO_BLOQUE.test(l)){buf=[];continue;}
+    const f=fechaLista(l);
+    if(f){
+      if(ultimo&&!ultimo.fecha&&desdeAmt<=1)ultimo.fecha=f;else cab=new Date(f);
+      continue;}
+    const m=l.match(RE_MONTO);
+    if(m){
+      const antes=l.slice(0,m.index).trim();if(antes)buf.push(antes);
+      let d=buf.join(' ').replace(/\s+/g,' ').trim();
+      d=d.replace(/\s+\d{1,2}:\d{2}(:\d{2})?\s*$/,'')       // hora al final
+         .replace(/\s+a \d+\s+meses?\s*$/i,'')               // cuotas
+         .replace(/\s+pendiente\s*$/i,'').trim();
+      const val=montoSMS(m[1]);
+      if(val>0){
+        const pago=/gracias por tu pago|pagaste|abono|pago recibido/i.test(d);
+        ultimo={desc:d.slice(0,60),monto:val,t:pago?'pay':'out',
+          fecha:cab?new Date(cab):null,sinFecha:!cab,neg:/-/.test(m[1])};
+        items.push(ultimo);}
+      buf=[];desdeAmt=0;continue;}
+    buf.push(l);desdeAmt++;
+  }
+  return items.filter(x=>x.monto>0);
+}
+/* categoría aprendida de lo que ya clasificaste antes */
+function categoriaDe(desc,t){
+  const k=comercio(desc);
+  const r=(DB.cfg.reglas||{})[k];
+  if(r&&r.cat)return r.cat;
+  return categoriza(desc,t);
+}
+function aprender(desc,cat){
+  if(!cat||cat==='Otro')return;
+  DB.cfg.reglas=DB.cfg.reglas||{};
+  const k=comercio(desc);if(!k)return;
+  DB.cfg.reglas[k]={cat};
+}
+
+/* ===== captura de SALDOS de bolsillos =====
+   No son movimientos: son una foto de como esta la plata hoy.
+   Se emparejan por nombre y se ajusta la diferencia. */
+function esCapturaSaldos(txt,items){
+  if(/tus bolsillos|mis bolsillos|crear bolsillo/i.test(txt))return true;
+  return items.length>=3&&items.every(x=>x.sinFecha);
+}
+function bolsilloPara(nombre){
+  const k=comercio(nombre);if(!k)return null;
+  const al=(DB.cfg.aliasBolsillo||{})[k];
+  if(al&&resolve(al).kind!=='gone')return al;
+  for(const a of DB.cfg.accounts)for(const p of a.pockets)
+    if(comercio(p.name)===k)return a.id+':'+p.id;
+  return null;
+}
+let saldos={filas:[],cuenta:null};
+function prepararSaldos(items){
+  const B=balances();
+  saldos.cuenta=saldos.cuenta||(DB.cfg.accounts[0]||{}).id;
+  saldos.filas=items.map((x,i)=>{
+    const ref=bolsilloPara(x.desc);
+    return {i,nombre:x.desc,valor:x.monto,ref:ref||'',
+      actual:ref?(B.bal[ref]||0):null,nuevo:!ref};
+  });
+}
+function dibujarSaldos(cont){
+  const B=balances();
+  const bolsillos=flat().filter(x=>x.id.includes(':'));
+  const cuentas=DB.cfg.accounts.map(a=>`<option value="${a.id}" ${saldos.cuenta===a.id?'selected':''}>${a.name}</option>`).join('');
+  $(cont).innerHTML=`
+    <div class="hint" style="margin:4px 0 10px">Esto son <b>saldos</b>, no movimientos.
+      La app va a dejar cada bolsillo con el valor que muestra tu banco.</div>
+    <div class="ed" style="margin-top:0"><div class="hd"><span>Cuenta de estos bolsillos</span></div>
+      <select id="sal-cuenta">${cuentas}</select></div>`
+    +saldos.filas.map(f=>{
+      const dif=f.ref?(f.valor-(B.bal[f.ref]||0)):null;
+      return `<div class="ed">
+        <div class="hd"><span>${f.nombre}</span>
+          <b style="font-size:14px;font-weight:700;color:var(--text)">${money(f.valor)}</b></div>
+        <select data-sal="${f.i}">
+          <option value="">— No lo relaciones, ignóralo —</option>
+          <option value="NUEVO" ${f.ref===''&&f.nuevo?'selected':''}>Crear bolsillo "${f.nombre}"</option>
+          ${bolsillos.map(b=>`<option value="${b.id}" ${f.ref===b.id?'selected':''}>${b.n}</option>`).join('')}
+        </select>
+        ${f.ref?`<div class="qd"><span>Hoy tiene ${money(B.bal[f.ref]||0)}</span>
+          <b style="color:${dif>0?'var(--income)':dif<0?'var(--expense)':'var(--text-dim)'}">
+            ${dif>0?'+':''}${money(dif)}</b></div>`
+          :`<div class="qd"><span>Sin relacionar</span><b style="font-size:11px;color:var(--text-dim)">
+            elige uno o créalo</b></div>`}
+      </div>`;}).join('')
+    +`<button class="btn" id="sal-ok" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">
+        Actualizar saldos</button>`;
+  $('sal-cuenta').onchange=()=>{saldos.cuenta=$('sal-cuenta').value;};
+  $(cont).querySelectorAll('[data-sal]').forEach(sel=>sel.onchange=()=>{
+    const f=saldos.filas[+sel.dataset.sal];
+    f.ref=sel.value==='NUEVO'?'':sel.value;
+    f.nuevo=sel.value==='NUEVO';
+    dibujarSaldos(cont);});
+  $('sal-ok').onclick=async()=>{
+    const a=DB.cfg.accounts.find(x=>x.id===saldos.cuenta);
+    if(!a)return toast('Elige la cuenta');
+    let n=0,creados=0;
+    DB.cfg.aliasBolsillo=DB.cfg.aliasBolsillo||{};
+    for(const f of saldos.filas){
+      if(f.nuevo){
+        const id='p'+Date.now()+'x'+(n)+Math.floor(Math.random()*9999);
+        a.pockets.push({id,name:f.nombre.slice(0,24),balance:f.valor});
+        DB.cfg.aliasBolsillo[comercio(f.nombre)]=a.id+':'+id;
+        creados++;n++;continue;}
+      if(!f.ref)continue;
+      DB.cfg.aliasBolsillo[comercio(f.nombre)]=f.ref;
+      const B2=balances(),dif=f.valor-(B2.bal[f.ref]||0);
+      if(Math.abs(dif)>0.009){
+        DB.mov.push({id:'aj'+Date.now()+n,ts:Date.now(),t:'adj',amount:dif,
+          src:f.ref,cat:'Ajuste de saldo',note:'Saldo del banco'});}
+      n++;}
+    await Store.save(DB);
+    const Bf=balances(),libre=Bf.bal[a.id]||0;
+    saldos.filas=[];$(cont).innerHTML='';render();
+    toast(n?'Se actualizaron '+n+' bolsillos'+(creados?', '+creados+' nuevos':''):'No se cambió nada');
+    if(libre<0)setTimeout(()=>modal({title:'Revisa el saldo de la cuenta',
+      text:`Los bolsillos suman más de lo que la app cree que tienes en ${a.name},
+        así que el disponible quedó en ${money(libre)}.
+        Actualiza el saldo total de la cuenta en Ajustes.`,
+      ok:'Ir a Cuentas',cancel:'Después'}).then(r=>{if(r.action==='ok')go('s-acc');}),700);};
+}
+
+/* busca los ultimos 4 digitos en el texto y devuelve la tarjeta o cuenta que coincida */
+function detectarOrigen(txt){
+  const t=String(txt);
+  const halladas=new Set();
+  /* formatos: ••6192   •••• 1894   ....1210   *6562   termina en 4417 */
+  const patrones=[
+    /(?:[•·*.\u2022]\s?){1,4}\s?(\d{4})\b/g,                      // ••6192  ···· 1894
+    /termina(?:da)?\s+en\s+(\d{4})\b/gi,                           // termina en 4417
+    /(?:cuenta|producto|tarjeta)\s*[•·*.\u2022]*\s*(\d{4})\b/gi    // producto 6562
+  ];
+  patrones.forEach(re=>{let m;while((m=re.exec(t)))halladas.add(m[1]);});
+  if(!halladas.size)return null;
+  for(const c of DB.cfg.cards)if(c.fin&&halladas.has(c.fin))return c.id;
+  for(const a of DB.cfg.accounts)if(a.fin&&halladas.has(a.fin))return a.id;
+  return {desconocida:[...halladas][0]};
+}
+
+/* decide si el texto es una lista de movimientos o mensajes sueltos,
+   y devuelve siempre la misma forma de resultado */
+function interpretarTexto(txt){
+  const lineas=String(txt).split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const encabezados=lineas.filter(l=>fechaLista(l)).length;
+  const soloMonto=lineas.filter(l=>/^(?:COP|\$)\s*-?\s*[\d][\d.,]*$/i.test(l)).length;
+  /* filas de "nombre  $monto", como la pantalla de bolsillos */
+  const filas=lineas.filter(l=>/^[^$\d][^$]{1,34}(?:COP|\$)\s*-?\s*[\d][\d.,]*\s*$/i.test(l)).length;
+  if(encabezados>=1||soloMonto>=2||filas>=3){
+    return parseLista(txt).map(x=>({fecha:isoOf(x.fecha||new Date()),desc:x.desc,
+      monto:x.monto,t:x.t,sinFecha:!!x.sinFecha,
+      regla:x.t==='pay'?'pago de tarjeta':'lista de movimientos'}));
+  }
+  const out=[];
+  partirMensajes(txt).forEach(linea=>{
+    const r=interpretar(linea);
+    if(r)out.push({fecha:isoOf(new Date(r.ts)),desc:r.desc,monto:r.amount,
+      t:r.t,regla:r.regla});});
+  return out;
+}
+
 /* separa un pegado largo en mensajes sueltos */
 function partirMensajes(txt){
   let x=String(txt).replace(/\r/g,'');
@@ -1833,20 +2005,31 @@ $('scan-read').onclick=()=>{
   const txt=$('scan-txt').value;
   if(!txt.trim())return toast('Pega primero los mensajes');
   const vistos=new Set(DB.mov.map(m=>m.ref).filter(Boolean));
-  const partes=partirMensajes(txt);
   let rep=0;
   const items=[];
-  partes.forEach((linea,i)=>{
-    const r=interpretar(linea);
-    if(!r)return;
-    const ref='sms:'+r.amount+':'+(r.ts||0)+':'+r.desc.slice(0,18);
+  const crudos=interpretarTexto(txt);
+  if(esCapturaSaldos(txt,crudos)){
+    scan.items=[];
+    prepararSaldos(crudos);
+    $('scan-status').textContent='Reconocí '+crudos.length+' bolsillos con su saldo.';
+    dibujarSaldos('scan-res');
+    return;}
+  const orig=detectarOrigen(txt);
+  if(orig&&typeof orig==='string'){scan.src=orig;$('scan-src').value=orig;}
+  crudos.forEach((r,i)=>{
+    const ref='sms:'+r.monto+':'+r.fecha+':'+comercio(r.desc).slice(0,18);
     if(vistos.has(ref)){rep++;return;}
-    items.push({id:'s'+i,fecha:isoOf(new Date(r.ts)),desc:r.desc,monto:r.amount,
-      t:r.t,cat:categoriza(r.desc,r.t),on:true,regla:r.regla,ref,dst:null});
+    items.push({id:'s'+i,fecha:r.fecha,desc:r.desc,monto:r.monto,t:r.t,
+      cat:categoriaDe(r.desc,r.t),on:true,regla:r.regla,ref,dst:null,
+      pagoDesde:(flat()[0]||{}).id});
   });
   scan.items=items;
+  const aviso=orig?(typeof orig==='string'
+      ?' · reconocí que son de '+nameOf(orig)
+      :' · vi una tarjeta terminada en '+orig.desconocida+', ponle esos dígitos en Ajustes para que la reconozca sola')
+    :'';
   $('scan-status').textContent=items.length
-    ?'Reconocí '+items.length+' movimientos'+(rep?' ('+rep+' ya estaban registrados)':'')+'. Revisa y agrega.'
+    ?'Reconocí '+items.length+' movimientos'+(rep?' ('+rep+' ya estaban)':'')+aviso+'. Revisa y agrega.'
     :(rep?'Esos '+rep+' movimientos ya estaban registrados.':'No reconocí ningún movimiento en ese texto.');
   drawScan();
 };
@@ -1917,6 +2100,8 @@ function drawScan(){
           `<option value="${n}" ${x.cat===n?'selected':''}>${n}</option>`).join('')}</select>
       </div>
       <input data-sf="fecha" data-i="${i}" type="date" value="${x.fecha}">
+      ${x.t==='pay'?`<select data-sf="pagoDesde" data-i="${i}">
+        ${flat().map(o=>`<option value="${o.id}" ${x.pagoDesde===o.id?'selected':''}>Pagado desde ${o.n}</option>`).join('')}</select>`:''}
       ${x.t==='move'?`<select data-sf="dst" data-i="${i}">
         <option value="">¿A dónde entró el efectivo?</option>
         ${flat().filter(o=>o.id!==scan.src).map(o=>
@@ -1929,10 +2114,15 @@ function drawScan(){
     if(!sel.length)return toast('No hay nada seleccionado');
     if(sel.some(x=>x.t==='move'&&!x.dst))return toast('Dile a dónde entró el efectivo del retiro');
     sel.forEach((x,n)=>{
+      if(x.t==='pay'){
+        DB.mov.push({id:'sc'+Date.now()+n,ts:isoTs(x.fecha),t:'pay',amount:x.monto,
+          src:x.pagoDesde,dst:scan.src,cat:'Pago tarjeta',note:x.desc,ref:x.ref,alloc:[]});
+        return;}
       const m={id:'sc'+Date.now()+n,ts:isoTs(x.fecha),t:x.t,amount:x.monto,
         src:scan.src,cat:x.t==='move'?'Retiro en cajero':x.cat,note:x.desc,ref:x.ref};
       if(x.t==='move')m.dst=x.dst;
       if(x.t==='out'&&isCard(scan.src))m.paidAmt=0;
+      aprender(x.desc,x.cat);
       DB.mov.push(m);});
     await Store.save(DB);scan.items=[];drawScan();
     $('scan-status').textContent='';render();
@@ -1948,6 +2138,7 @@ $('scan-res').addEventListener('change',e=>{
   const t=e.target;if(!t.dataset.sf)return;
   if(t.dataset.sf==='cat')scan.items[+t.dataset.i].cat=t.value;
   if(t.dataset.sf==='dst')scan.items[+t.dataset.i].dst=t.value;
+  if(t.dataset.sf==='pagoDesde')scan.items[+t.dataset.i].pagoDesde=t.value;
   if(t.dataset.sf==='fecha')scan.items[+t.dataset.i].fecha=t.value;});
 $('scan-res').addEventListener('click',e=>{
   const b=e.target.closest('[data-sc]');if(!b)return;
@@ -2191,6 +2382,8 @@ function renderAccts(){
     return `<div class="ed"><div class="hd"><span>Cuenta ${i+1}</span><button data-dela="${a.id}">Quitar</button></div>
       <input data-af="name" data-i="${i}" value="${a.name}" placeholder="Nombre de la cuenta">
       <input data-af="balance" data-i="${i}" inputmode="decimal" data-money value="${mv(B.accTotal[a.id]||0)}" placeholder="Saldo total hoy">
+      <input data-af="fin" data-i="${i}" inputmode="numeric" maxlength="4" value="${a.fin||''}"
+        placeholder="Últimos 4 dígitos (opcional)">
       <div class="swatches">${ACOLORS.map((c,ci)=>
         `<button class="sw ${a.color===ci?'on':''}" data-ac="${ci}" data-i="${i}" style="background:${c}"></button>`).join('')}</div>
       <div class="subh"><span>Bolsillos</span>
@@ -2205,6 +2398,7 @@ $('acctedit').addEventListener('input',async e=>{
   const t=e.target;
   if(t.dataset.af){const a=DB.cfg.accounts[+t.dataset.i];
     if(t.dataset.af==='name')a.name=t.value;
+    else if(t.dataset.af==='fin')a.fin=t.value.replace(/\D/g,'').slice(0,4);
     else{const B=balances();a.balance+=clean(t.value)-(B.accTotal[a.id]||0);}
     await Store.save(DB);render();updateAvail();return;}
   if(t.dataset.pf){const a=DB.cfg.accounts[+t.dataset.i],p=a.pockets[+t.dataset.p];
@@ -2254,6 +2448,8 @@ function renderCardEdit(){
     <div class="ed"><div class="hd"><span>Tarjeta ${i+1}</span><button data-del="${c.id}">Quitar</button></div>
       <input data-f="name" data-i="${i}" value="${c.name}" placeholder="Nombre">
       <input data-f="limit" data-i="${i}" inputmode="decimal" data-money value="${mv(c.limit)}" placeholder="Cupo total (opcional)">
+      <input data-f="fin" data-i="${i}" inputmode="numeric" maxlength="4" value="${c.fin||''}"
+        placeholder="Últimos 4 dígitos (para reconocerla en capturas)">
       <div class="dlbl"><span>Día de corte</span><span>Día de pago</span></div>
       <div class="duo">
         <input data-f="cutoff" data-i="${i}" type="number" min="1" max="31" inputmode="numeric"
@@ -2278,6 +2474,7 @@ async function cardField(t){
   if(f==='name')c.name=t.value;
   else if(f==='limit')c.limit=clean(t.value);
   else if(f==='pocket')c.pocket=t.value||null;
+  else if(f==='fin')c.fin=t.value.replace(/\D/g,'').slice(0,4);
   else{const n=parseInt(t.value,10);c[f]=(n>=1&&n<=31)?n:null;}
   await Store.save(DB);render();}
 $('cardedit').addEventListener('input',e=>{if(e.target.tagName==='INPUT')cardField(e.target);});
