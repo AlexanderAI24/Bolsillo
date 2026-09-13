@@ -437,7 +437,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v20</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v22</div>
     </div>
   </section>
 
@@ -478,11 +478,8 @@ section{position:relative;}
       <label>Movimientos detectados</label>
       <div id="inb-status" class="hint" style="margin-top:0"></div>
       <div id="inb-list"></div>
-      <label>Traer SMS viejos</label>
-      <div class="duo">
-        <button class="btn" data-sms="30" style="margin:0">Últimos 30 días</button>
-        <button class="btn" data-sms="90" style="margin:0">90 días</button>
-      </div>
+      <label>Correo del banco</label>
+      <div id="mail-cfg"></div>
       <label>Modo aprendizaje</label>
       <button class="btn" id="inb-log">Ver lo que ha capturado</button>
       <div id="inb-logbox"></div>
@@ -1204,6 +1201,12 @@ async function togglePlan(i){
   }
   const ts=planTs();let adjId=null;
 
+  if(it.kind==='pocket'&&it.target&&resolve(it.target).kind==='gone'){
+    const r=await modal({title:'Ese bolsillo ya no existe',
+      text:`El concepto <b>${it.name}</b> apuntaba a un bolsillo que borraste. Elige otro en Editar plan.`,
+      ok:'Ir a editar el plan'});
+    if(r.action==='ok')go('planedit');
+    return;}
   if(it.kind==='pocket'&&it.target){
     const B=balances(),actual=B.bal[it.target]||0;
     const r=await modal({title:'Actualizar '+resolve(it.target).name,
@@ -1296,6 +1299,10 @@ function renderPlanEdit(){
   $('pl-src').innerHTML=F.map(x=>`<option value="${x.id}" ${P.src===x.id?'selected':''}>${x.n}</option>`).join('')
     ||'<option value="">Crea una cuenta primero</option>';
   let queda=P.income;
+  const bolsillos=F.filter(x=>x.id.includes(':'));
+  P.items.forEach(it=>{
+    if(it.kind==='pocket'&&(!it.target||!bolsillos.some(b=>b.id===it.target)))
+      it.target=bolsillos.length?bolsillos[0].id:null;});
   $('planedit').innerHTML=P.items.map((it,i)=>{
     queda-=(+it.amount||0);
     return `
@@ -1575,8 +1582,21 @@ $('save').onclick=async()=>{
   if(d.t==='out'&&isCard(m.src)){if(m.paidAmt===undefined)m.paidAmt=0;}
   else{delete m.paidAmt;delete m.res;}
   if(!prev)DB.mov.push(m);
-  else if(prev.plan)Object.values(DB.cfg.plans).forEach(P=>
-    P.items.forEach(it=>{if(it.movId===prev.id){it.amount=val;it.name=m.note||it.name;}}));
+  else{
+    /* si la compra tenia plata apartada, el traslado se ajusta al nuevo monto */
+    if(prev.resMovId){
+      const tr=DB.mov.find(x=>x.id===prev.resMovId);
+      if(tr){
+        const falta=Math.max(0,val-(m.paidAmt||0));
+        if(falta<=0.009){DB.mov=DB.mov.filter(x=>x.id!==prev.resMovId);
+          m.res=false;m.resMovId=null;}
+        else tr.amount=falta;
+      }else{m.res=false;m.resMovId=null;}
+    }
+    if(prev.plan)
+      Object.values(DB.cfg.plans).forEach(P=>
+        P.items.forEach(it=>{if(it.movId===prev.id){it.amount=val;it.name=m.note||it.name;}}));
+  }
   await Store.save(DB);
   cursor=new Date(ts);cursor.setDate(1);
   const era=!!prev;d.editId=null;
@@ -1589,7 +1609,7 @@ const NATIVO=(()=>{try{return !!(window.Android&&window.Android.esNativo&&window
 let bandeja=[];
 function renderInbox(){
   if(!NATIVO){$('inb-status').textContent='Esta pantalla solo funciona dentro de la app instalada.';return;}
-  const okN=window.Android.permisoNotificaciones(),okS=window.Android.permisoSms();
+  const okN=window.Android.permisoNotificaciones();
   $('inb-perm').innerHTML=`
     <label style="margin-top:4px">Permisos</label>
     <div class="ed"><div class="hd"><span>Leer notificaciones</span>
@@ -1597,13 +1617,9 @@ function renderInbox(){
         ${okN?'Activo':'Apagado'}</span></div>
       <div class="hint" style="margin:0 0 8px">Para capturar compras de Nu, BBVA y Google Pay.</div>
       ${okN?'':'<button class="mini" id="perm-n">Activar en ajustes de Android</button>'}</div>
-    <div class="ed"><div class="hd"><span>Leer SMS</span>
-      <span style="color:${okS?'var(--income)':'var(--expense)'};font-size:12px;font-weight:700">
-        ${okS?'Activo':'Apagado'}</span></div>
-      <div class="hint" style="margin:0 0 8px">Bancolombia avisa por mensaje de texto.</div>
-      ${okS?'':'<button class="mini" id="perm-s">Dar permiso</button>'}</div>`;
+    `;
   if($('perm-n'))$('perm-n').onclick=()=>window.Android.abrirPermisoNotificaciones();
-  if($('perm-s'))$('perm-s').onclick=()=>window.Android.pedirPermisoSms();
+  renderCorreo();
   cargarBandeja();
 }
 function cargarBandeja(){
@@ -1681,12 +1697,46 @@ $('inb-list').addEventListener('click',e=>{
   try{window.Android.consumir(JSON.stringify([x.id]));}catch(err){}
   bandeja.splice(+b.dataset.ib,1);drawInbox();
   $('inb-status').textContent=bandeja.length+' por revisar';});
-document.querySelectorAll('[data-sms]').forEach(b=>b.onclick=()=>{
-  if(!NATIVO)return toast('Solo dentro de la app instalada');
-  if(!window.Android.permisoSms())return toast('Primero da el permiso de SMS');
-  const n=window.Android.importarSms(+b.dataset.sms);
-  toast(n<0?'No se pudieron leer los SMS':'Se trajeron '+n+' mensajes');
-  cargarBandeja();});
+function renderCorreo(){
+  const c=DB.cfg.correo||{};
+  $('mail-cfg').innerHTML=`
+    <div class="ed">
+      <input id="mc-user" value="${c.usuario||''}" placeholder="Correo (el de la cuenta dedicada)">
+      <input id="mc-pass" type="password" value="${c.clave||''}" placeholder="Contraseña de aplicación">
+      <div class="duo">
+        <select id="mc-prov">
+          <option value="gmail" ${c.prov!=='outlook'?'selected':''}>Gmail</option>
+          <option value="outlook" ${c.prov==='outlook'?'selected':''}>Outlook</option>
+        </select>
+        <input id="mc-carpeta" value="${c.carpeta||'INBOX'}" placeholder="Carpeta">
+      </div>
+      <input id="mc-de" value="${(c.remitentes||['bancolombia','bbva']).join(', ')}"
+        placeholder="Remitentes permitidos, separados por coma">
+      <div class="hint" style="margin:2px 0 8px">Solo se leen correos de esos remitentes.
+        La clave se queda en este celular.</div>
+      <div class="duo">
+        <button class="mini" id="mc-save" style="border-style:solid">Guardar</button>
+        <button class="mini" id="mc-read" style="border-style:solid;color:var(--cta)">Revisar correo</button>
+      </div>
+    </div>`;
+  $('mc-save').onclick=async()=>{
+    DB.cfg.correo={usuario:$('mc-user').value.trim(),clave:$('mc-pass').value.trim(),
+      prov:$('mc-prov').value,carpeta:$('mc-carpeta').value.trim()||'INBOX',
+      remitentes:$('mc-de').value.split(',').map(x=>x.trim()).filter(Boolean)};
+    await Store.save(DB);toast('Datos del correo guardados');};
+  $('mc-read').onclick=()=>{
+    const k=DB.cfg.correo;
+    if(!k||!k.usuario||!k.clave)return toast('Primero guarda el correo y la clave');
+    const host=k.prov==='outlook'?'outlook.office365.com':'imap.gmail.com';
+    $('inb-status').textContent='Revisando el correo...';
+    setTimeout(()=>{
+      const n=window.Android.leerCorreo(host,993,k.usuario,k.clave,k.carpeta||'INBOX',
+        JSON.stringify(k.remitentes||[]),30);
+      if(n===-2)$('inb-status').textContent='El correo o la clave no sirven. Recuerda que va la contraseña de aplicación, no la normal.';
+      else if(n<0)$('inb-status').textContent='No se pudo conectar. Revisa la conexión y el proveedor.';
+      else{toast('Se revisaron '+n+' correos nuevos');cargarBandeja();}
+    },50);};
+}
 $('inb-log').onclick=()=>{
   if(!NATIVO)return;
   let r=[];try{r=JSON.parse(window.Android.registro()||'[]');}catch(e){}
