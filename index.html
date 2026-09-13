@@ -437,7 +437,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v27</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v28</div>
     </div>
   </section>
 
@@ -542,8 +542,8 @@ section{position:relative;}
       <label>Traer datos</label>
       <button class="btn" id="imp-csv">Importar movimientos desde CSV</button>
       <button class="btn" id="imp-json">Restaurar respaldo completo</button>
-      <input type="file" id="fcsv" accept=".csv,.txt" style="display:none">
-      <input type="file" id="fjson" accept=".json" style="display:none">
+      <input type="file" id="fcsv" accept="text/csv,.csv,.txt,*/*" style="display:none">
+      <input type="file" id="fjson" accept="application/json,.json,text/plain,*/*" style="display:none">
       <div class="hint">El CSV debe tener encabezados con al menos <b>fecha</b> y <b>monto</b>.</div>
       <label>Sacar datos</label>
       <button class="btn" id="exp-csv">Descargar CSV para Excel</button>
@@ -1731,6 +1731,8 @@ $('inb-log').onclick=()=>{
     :'<div class="hint">Todavía no ha capturado nada.</div>';
 };
 window.onMensajesNuevos=()=>{if(NATIVO&&$('v-s-inbox').style.display==='block')cargarBandeja();};
+/* la app Android llama esto cuando le compartes algo */
+window.abrirBandeja=()=>{if(!NATIVO)return;go('s-inbox');cargarBandeja();};
 
 /* ============ interprete de mensajes bancarios ============ */
 const MESESTXT={enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,
@@ -1804,6 +1806,8 @@ const RE_FECHALISTA=/^(\d{1,2})\s+(?:de\s+)?([a-záéíóúA-ZÁÉÍÓÚ]{3,12})
 /* ruido que va en medio de un movimiento: se salta sin perder la descripción */
 const RUIDO_LINEA=/^(pendiente|aprobad[oa]|a \d+ meses?|\d{1,2}:\d{2}(:\d{2})?)$/i;
 /* ruido de encabezado: corta lo que se venía acumulando */
+/* la barra de estado del celular: "4:26 Vo LTE 4.5G 70%" */
+const RUIDO_BARRA=/^\d{1,2}:\d{2}\b.*(lte|4g|5g|4\.5g|wi-?fi|\d{1,3}\s?%)/i;
 const RUIDO_BLOQUE=/^(volver|explorar|tarjetas|[úu]ltimos movimientos|buscar|revisa tu resumen|lleg[oó] tu fecha|ya puedes ver|mastercard|visa|tu cupo|disponible|usado|resumen|per[ií]odo|fecha de corte|fecha l[ií]mite|(tus|mis) bolsillos|ocultar saldos|crear bolsillo|inicio|transacciones|tr[áa]mites|ajustes|hola,)/i;
 function fechaLista(l){
   const m=l.match(RE_FECHALISTA);if(!m)return null;
@@ -1821,11 +1825,32 @@ function parseLista(texto){
   const items=[];let cab=null,buf=[],ultimo=null,desdeAmt=0;
   for(const l of lineas){
     if(RUIDO_LINEA.test(l))continue;
-    if(RUIDO_BLOQUE.test(l)){buf=[];continue;}
+    if(RUIDO_BARRA.test(l)||RUIDO_BLOQUE.test(l)){buf=[];continue;}
+    /* frases de la interfaz, no nombres de comercio */
+    const pal=l.split(/\s+/).length;
+    if((pal>6&&!/\d/.test(l))||(pal>=3&&/[.:]$/.test(l))){buf=[];continue;}
     const f=fechaLista(l);
     if(f){
-      if(ultimo&&!ultimo.fecha&&desdeAmt<=1)ultimo.fecha=f;else cab=new Date(f);
+      if(ultimo&&!ultimo.fecha&&desdeAmt<=1){
+        ultimo.fecha=f;
+        /* lo que se acumulo entre el monto y la fecha es la cola del nombre */
+        if(buf.length){
+          ultimo.desc=(ultimo.desc+' '+buf.join(' ')).replace(/\s+/g,' ').trim().slice(0,60);
+          buf=[];}
+      }else cab=new Date(f);
       continue;}
+    /* una fecha pegada al final de la linea, como "ENVIGADO 10 sept" */
+    if(ultimo&&!ultimo.fecha&&desdeAmt<=1){
+      const fp=l.match(/^(.*?)\s+(\d{1,2}\s+(?:de\s+)?[a-záéíóúA-ZÁÉÍÓÚ]{3,12}\.?(?:\s+\d{4})?)$/);
+      if(fp){
+        const f2=fechaLista(fp[2].trim());
+        if(f2){
+          ultimo.fecha=f2;
+          const cola=(fp[1]||'').trim();
+          if(cola)ultimo.desc=(ultimo.desc+' '+cola).replace(/\s+/g,' ').trim().slice(0,60);
+          buf=[];continue;}
+      }
+    }
     const m=l.match(RE_MONTO);
     if(m){
       const antes=l.slice(0,m.index).trim();if(antes)buf.push(antes);
@@ -1972,7 +1997,7 @@ function interpretarTexto(txt){
   const filas=lineas.filter(l=>/^[^$\d][^$]{1,34}(?:COP|\$)\s*-?\s*[\d][\d.,]*\s*$/i.test(l)).length;
   if(encabezados>=1||soloMonto>=2||filas>=3){
     return parseLista(txt).map(x=>({fecha:isoOf(x.fecha||new Date()),desc:x.desc,
-      monto:x.monto,t:x.t,sinFecha:!!x.sinFecha,
+      monto:x.monto,t:x.t,sinFecha:!x.fecha,
       regla:x.t==='pay'?'pago de tarjeta':'lista de movimientos'}));
   }
   const out=[];
@@ -2388,7 +2413,9 @@ function renderAccts(){
         `<button class="sw ${a.color===ci?'on':''}" data-ac="${ci}" data-i="${i}" style="background:${c}"></button>`).join('')}</div>
       <div class="subh"><span>Bolsillos</span>
         <span>Disponible <b style="color:${av<0?'var(--expense)':'inherit'}">${money(av)}</b></span></div>
-      ${a.pockets.map((p,pi)=>`<div class="duo">
+      ${a.pockets.map((p,pi)=>({p,pi}))
+         .sort((x,y)=>(B.bal[a.id+':'+y.p.id]||0)-(B.bal[a.id+':'+x.p.id]||0))
+         .map(({p,pi})=>`<div class="duo">
         <input data-pf="name" data-i="${i}" data-p="${pi}" value="${p.name}" placeholder="Nombre">
         <input class="sm" data-pf="balance" data-i="${i}" data-p="${pi}" inputmode="decimal" data-money value="${mv(B.bal[a.id+':'+p.id]||0)}" placeholder="Saldo hoy">
         <button data-delp="${pi}" data-i="${i}">✕</button></div>`).join('')}
@@ -2524,7 +2551,9 @@ $('imp-json').onclick=()=>$('fjson').click();
 $('fjson').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=async()=>{try{const x=JSON.parse(r.result);if(!x.mov)throw 0;DB=migrate(x);
     applyTheme(DB.cfg.theme);await Store.save(DB);fill();render();toast('Respaldo restaurado');
-  }catch(err){toast('Ese archivo no es un respaldo válido');}};r.readAsText(f);};
+  }catch(err){toast('No pude leer ese archivo. Debe ser el JSON de respaldo.');}};
+  r.onerror=()=>toast('No se pudo abrir el archivo');
+  r.readAsText(f);};
 
 function splitCSV(line,sep){
   const out=[];let cur='',q=false;
