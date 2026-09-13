@@ -1,17 +1,14 @@
 package com.bolsillo.app
 
-import android.Manifest
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
-import android.provider.Telephony
 import android.webkit.*
 import android.widget.Toast
 import org.json.JSONArray
@@ -23,7 +20,6 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private var subirArchivo: ValueCallback<Array<Uri>>? = null
     private val PEDIR_ARCHIVO = 101
-    private val PEDIR_SMS = 102
 
     companion object {
         // La app web vive en GitHub Pages: actualizarla NO requiere recompilar el APK.
@@ -124,37 +120,17 @@ class MainActivity : Activity() {
             }
         }
 
-        @JavascriptInterface fun permisoSms(): Boolean =
-            checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
-
-        @JavascriptInterface fun pedirPermisoSms() {
-            runOnUiThread {
-                requestPermissions(
-                    arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS),
-                    PEDIR_SMS)
-            }
-        }
-
-        /** Trae los SMS de los ultimos N dias a la bandeja. */
-        @JavascriptInterface fun importarSms(dias: Int): Int {
-            if (!permisoSms()) return -1
-            var n = 0
-            try {
-                val desde = System.currentTimeMillis() - dias * 86_400_000L
-                val cur = contentResolver.query(
-                    Telephony.Sms.Inbox.CONTENT_URI,
-                    arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
-                    "${Telephony.Sms.DATE} >= ?", arrayOf(desde.toString()),
-                    "${Telephony.Sms.DATE} ASC")
-                cur?.use {
-                    while (it.moveToNext()) {
-                        val de = it.getString(0) ?: "SMS"
-                        val cuerpo = it.getString(1) ?: continue
-                        if (Inbox.agregar(applicationContext, "sms:$de", "SMS $de", "", cuerpo)) n++
-                    }
-                }
-            } catch (e: Exception) { return -1 }
-            return n
+        /** Lee correos del banco por IMAP. Solo trae los de remitentes autorizados. */
+        @JavascriptInterface fun leerCorreo(host: String, puerto: Int, usuario: String,
+                                            clave: String, carpeta: String,
+                                            remitentesJson: String, dias: Int): Int {
+            return try {
+                val permitidos = mutableListOf<String>()
+                val a = JSONArray(remitentesJson)
+                for (i in 0 until a.length()) permitidos.add(a.getString(i).lowercase())
+                Correo.leer(applicationContext, host, puerto, usuario, clave,
+                    carpeta, permitidos, dias)
+            } catch (e: Exception) { -1 }
         }
 
         /** Guarda los respaldos en la carpeta Descargas. */
