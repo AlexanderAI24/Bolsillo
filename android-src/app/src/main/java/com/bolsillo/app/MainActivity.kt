@@ -81,7 +81,7 @@ class MainActivity : Activity() {
             val t = i.getStringExtra(Intent.EXTRA_TEXT) ?: return
             Inbox.agregar(applicationContext, "compartido", "Texto compartido", "", t)
             avisar("Texto recibido")
-            refrescar()
+            irABandeja()
             return
         }
         if (!tipo.startsWith("image/")) return
@@ -101,7 +101,7 @@ class MainActivity : Activity() {
                 if (!texto.isNullOrBlank())
                     Inbox.agregar(applicationContext, "captura", "Captura", "", texto)
                 faltan--
-                if (faltan <= 0) { avisar("Captura leída"); refrescar() }
+                if (faltan <= 0) { avisar("Captura leída"); irABandeja() }
             }
         }
     }
@@ -112,6 +112,13 @@ class MainActivity : Activity() {
 
     private fun refrescar() = runOnUiThread {
         web.evaluateJavascript("window.onMensajesNuevos && window.onMensajesNuevos();", null)
+    }
+
+    /** Tras compartir, lleva directo a la bandeja sin que el usuario la busque. */
+    private fun irABandeja() = runOnUiThread {
+        web.postDelayed({
+            web.evaluateJavascript("window.abrirBandeja && window.abrirBandeja();", null)
+        }, 400)
     }
 
     override fun onActivityResult(req: Int, res: Int, data: Intent?) {
@@ -136,10 +143,17 @@ class MainActivity : Activity() {
         /** Guarda los respaldos en la carpeta Descargas. */
         @JavascriptInterface fun guardarArchivo(nombre: String, contenido: String): Boolean {
             return try {
+                // el tipo correcto segun la extension: si no, el selector
+                // de archivos no deja escoger el respaldo despues
+                val tipo = when {
+                    nombre.endsWith(".json") -> "application/json"
+                    nombre.endsWith(".csv")  -> "text/csv"
+                    else -> "text/plain"
+                }
                 if (Build.VERSION.SDK_INT >= 29) {
                     val v = ContentValues().apply {
                         put(MediaStore.MediaColumns.DISPLAY_NAME, nombre)
-                        put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+                        put(MediaStore.MediaColumns.MIME_TYPE, tipo)
                         put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                     }
                     val uri = contentResolver.insert(
