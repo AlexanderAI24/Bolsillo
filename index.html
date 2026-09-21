@@ -422,12 +422,10 @@ section{position:relative;}
       <button class="mi" data-go="s-fix">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg></span>
         <span class="n">Gastos fijos</span><span class="ch">›</span></button>
-      <button class="mi" data-go="s-inbox" id="mi-inbox" style="display:none">
-        <span class="mic"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4M4 13l2.5-7h11L20 13v5a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></svg></span>
-        <span class="n">Bandeja del celular</span><span class="ch">›</span></button>
+
       <button class="mi" data-go="s-scan">
         <span class="mic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 15l5-4 4 3 3-2 6 4"/><circle cx="8.5" cy="9.5" r="1.3"/></svg></span>
-        <span class="n">Leer una captura</span><span class="ch">›</span></button>
+        <span class="n">Pegar texto del banco</span><span class="ch">›</span></button>
       <button class="mi" data-go="s-style">
         <span class="mic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16"/></svg></span>
         <span class="n">Estilo visual</span><span class="ch">›</span></button>
@@ -437,7 +435,7 @@ section{position:relative;}
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v28</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v29</div>
     </div>
   </section>
 
@@ -474,12 +472,13 @@ section{position:relative;}
 
   <section id="v-s-inbox" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
-    <div class="h" style="padding-top:10px"><div class="eyebrow">Bandeja del celular</div></div>
+    <div class="h" style="padding-top:10px"><div class="eyebrow">Lo que compartiste</div></div>
     <div class="set">
       <div id="inb-perm"></div>
       <label>Movimientos detectados</label>
       <div id="inb-status" class="hint" style="margin-top:0"></div>
       <div id="inb-list"></div>
+      <div id="inb-crudo"></div>
 
       <label>Modo aprendizaje</label>
       <button class="btn" id="inb-log">Ver lo que ha capturado</button>
@@ -491,25 +490,18 @@ section{position:relative;}
 
   <section id="v-s-scan" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
-    <div class="h" style="padding-top:10px"><div class="eyebrow">Leer una captura</div></div>
+    <div class="h" style="padding-top:10px"><div class="eyebrow">Pegar texto del banco</div></div>
     <div class="set">
       <label>Dónde se hicieron esos movimientos</label>
       <select id="scan-src"></select>
       <label>Pegar mensajes del banco</label>
       <textarea id="scan-txt" rows="5" placeholder="Pega mensajes del banco, la lista de movimientos de Nu, BBVA o Google Pay, o tus bolsillos de Bancolombia."></textarea>
-      <button class="btn" id="scan-read" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">Interpretar mensajes</button>
+      <button class="btn" id="scan-read" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">Interpretar</button>
+      <div id="scan-status" class="hint"></div>
       <div class="hint">Funciona sin conexión y sin clave. Entiende los SMS de Bancolombia y las
         listas de movimientos de Nu, BBVA y Google Pay. Recuerda las categorías que ya asignaste
         a cada comercio.</div>
-      <label>O leer una imagen</label>
-      <button class="btn" id="scan-pick">Elegir captura de pantalla</button>
-      <input type="file" id="scan-file" accept="image/*" style="display:none">
-      <div id="scan-status" class="hint"></div>
       <div id="scan-res"></div>
-      <label>Clave de la API de Claude</label>
-      <input id="scan-key" type="password" placeholder="sk-ant-...">
-      <div class="hint" style="padding-bottom:24px">La clave se guarda solo en este dispositivo y se usa para leer
-        la imagen. La sacas en console.anthropic.com. Cada lectura cuesta centavos.</div>
     </div>
   </section>
 
@@ -541,10 +533,13 @@ section{position:relative;}
     <div class="set">
       <label>Traer datos</label>
       <button class="btn" id="imp-csv">Importar movimientos desde CSV</button>
-      <button class="btn" id="imp-json">Restaurar respaldo completo</button>
+      <button class="btn" id="imp-json">Restaurar desde archivo</button>
+      <button class="btn" id="imp-pegar">Restaurar pegando el texto</button>
+      <div id="pegarbox"></div>
       <input type="file" id="fcsv" accept="text/csv,.csv,.txt,*/*" style="display:none">
       <input type="file" id="fjson" accept="application/json,.json,text/plain,*/*" style="display:none">
-      <div class="hint">El CSV debe tener encabezados con al menos <b>fecha</b> y <b>monto</b>.</div>
+      <div class="hint">El CSV debe tener encabezados con al menos <b>fecha</b> y <b>monto</b>.
+        Si el selector de archivos no te deja escoger el respaldo, usa la opción de pegar el texto.</div>
       <label>Sacar datos</label>
       <button class="btn" id="exp-csv">Descargar CSV para Excel</button>
       <button class="btn" id="exp-json">Descargar respaldo completo</button>
@@ -1631,13 +1626,14 @@ function cargarBandeja(){
   try{crudos=JSON.parse(window.Android.pendientes()||'[]');}catch(e){}
   const vistos=new Set(DB.mov.map(m=>m.ref).filter(Boolean));
   bandeja=[];let ya=0,sin=0;
+  if(saldos.filas.length)return;   /* no borrar una captura de saldos en pantalla */
   for(const c of crudos){
     const res=interpretarTexto(c.texto);
     if(res.length&&esCapturaSaldos(c.texto,res)){
       prepararSaldos(res);
+      saldos.msgId=c.id;
       $('inb-status').textContent='Esa captura trae '+res.length+' bolsillos con su saldo.';
       dibujarSaldos('inb-list');
-      try{window.Android.consumir(JSON.stringify([c.id]));}catch(e){}
       return;}
   }
   crudos.forEach(c=>{
@@ -1655,11 +1651,29 @@ function cargarBandeja(){
   });
   $('inb-status').textContent=bandeja.length
     ?bandeja.length+' por revisar'+(ya?' · '+ya+' ya estaban':'')
-    :(crudos.length?'Nada nuevo'+(sin?' ('+sin+' mensajes no se entendieron)':''):'Todavía no ha llegado nada.');
+    :(crudos.length?(sin?'No entendí lo que llegó. Mira abajo qué leyó la app.':'Nada nuevo'):'Todavía no ha llegado nada.');
   drawInbox();
+  /* si no se entendio nada, se muestra el texto crudo para poder revisarlo */
+  const nada=crudos.filter(c=>!interpretarTexto(c.texto).length);
+  $('inb-crudo').innerHTML=(!bandeja.length&&nada.length)?nada.map(c=>`
+    <div class="ed"><div class="hd"><span>Texto leído · ${c.app}</span>
+      <button data-desc="${c.id}">Descartar</button></div>
+      <div style="font-size:11.5px;color:var(--text-dim);line-height:1.5;
+        white-space:pre-wrap;max-height:260px;overflow:auto">${(c.texto||'').replace(/</g,'&lt;')}</div>
+      <button class="mini" data-copiar="${c.id}" style="margin-top:8px;border-style:solid">Copiar este texto</button>
+    </div>`).join(''):'';
+  $('inb-crudo').querySelectorAll('[data-desc]').forEach(b=>b.onclick=()=>{
+    try{window.Android.consumir(JSON.stringify([b.dataset.desc]));}catch(e){}
+    cargarBandeja();});
+  $('inb-crudo').querySelectorAll('[data-copiar]').forEach(b=>b.onclick=()=>{
+    const c=crudos.find(x=>x.id===b.dataset.copiar);if(!c)return;
+    try{navigator.clipboard.writeText(c.texto);toast('Texto copiado');}
+    catch(e){toast('No se pudo copiar');}});
 }
 function drawInbox(){
-  if(!bandeja.length){$('inb-list').innerHTML='';return;}
+  if(!bandeja.length){
+    if(!saldos.filas.length)$('inb-list').innerHTML='';
+    return;}
   const F=flat().concat(DB.cfg.cards.map(c=>({id:c.id,n:c.name+' (tarjeta)'})));
   const cats=CATS.out.map(([n])=>n),cin=CATS.in.map(([n])=>n);
   $('inb-list').innerHTML=bandeja.map((x,i)=>`
@@ -1732,7 +1746,7 @@ $('inb-log').onclick=()=>{
 };
 window.onMensajesNuevos=()=>{if(NATIVO&&$('v-s-inbox').style.display==='block')cargarBandeja();};
 /* la app Android llama esto cuando le compartes algo */
-window.abrirBandeja=()=>{if(!NATIVO)return;go('s-inbox');cargarBandeja();};
+window.abrirBandeja=()=>{if(!NATIVO)return;go('s-inbox');};
 
 /* ============ interprete de mensajes bancarios ============ */
 const MESESTXT={enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,
@@ -1898,7 +1912,7 @@ function bolsilloPara(nombre){
     if(comercio(p.name)===k)return a.id+':'+p.id;
   return null;
 }
-let saldos={filas:[],cuenta:null};
+let saldos={filas:[],cuenta:null,msgId:null};
 function prepararSaldos(items){
   const B=balances();
   saldos.cuenta=saldos.cuenta||(DB.cfg.accounts[0]||{}).id;
@@ -1934,7 +1948,12 @@ function dibujarSaldos(cont){
             elige uno o créalo</b></div>`}
       </div>`;}).join('')
     +`<button class="btn" id="sal-ok" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">
-        Actualizar saldos</button>`;
+        Actualizar saldos</button>
+      <button class="btn" id="sal-no">Descartar esta captura</button>`;
+  $('sal-no').onclick=()=>{
+    if(saldos.msgId){try{window.Android.consumir(JSON.stringify([saldos.msgId]));}catch(e){}}
+    saldos.filas=[];saldos.msgId=null;$(cont).innerHTML='';
+    if(NATIVO)cargarBandeja();};
   $('sal-cuenta').onchange=()=>{saldos.cuenta=$('sal-cuenta').value;};
   $(cont).querySelectorAll('[data-sal]').forEach(sel=>sel.onchange=()=>{
     const f=saldos.filas[+sel.dataset.sal];
@@ -1961,7 +1980,8 @@ function dibujarSaldos(cont){
       n++;}
     await Store.save(DB);
     const Bf=balances(),libre=Bf.bal[a.id]||0;
-    saldos.filas=[];$(cont).innerHTML='';render();
+    if(saldos.msgId){try{window.Android.consumir(JSON.stringify([saldos.msgId]));}catch(e){}}
+    saldos.filas=[];saldos.msgId=null;$(cont).innerHTML='';render();
     toast(n?'Se actualizaron '+n+' bolsillos'+(creados?', '+creados+' nuevos':''):'No se cambió nada');
     if(libre<0)setTimeout(()=>modal({title:'Revisa el saldo de la cuenta',
       text:`Los bolsillos suman más de lo que la app cree que tienes en ${a.name},
@@ -2022,7 +2042,6 @@ function renderScan(){
   if(!F.length){$('scan-res').innerHTML='<div class="hint">Primero crea una cuenta o una tarjeta.</div>';return;}
   if(!scan.src||!F.some(x=>x.id===scan.src))scan.src=F[0].id;
   $('scan-src').innerHTML=F.map(x=>`<option value="${x.id}" ${scan.src===x.id?'selected':''}>${x.n}</option>`).join('');
-  $('scan-key').value=DB.cfg.apiKey||'';
   drawScan();
 }
 $('scan-src').onchange=()=>{scan.src=$('scan-src').value;};
@@ -2058,59 +2077,7 @@ $('scan-read').onclick=()=>{
     :(rep?'Esos '+rep+' movimientos ya estaban registrados.':'No reconocí ningún movimiento en ese texto.');
   drawScan();
 };
-$('scan-key').onchange=async()=>{DB.cfg.apiKey=$('scan-key').value.trim();await Store.save(DB);
-  toast('Clave guardada en este dispositivo');};
-$('scan-pick').onclick=()=>{
-  if(!flat().length&&!DB.cfg.cards.length)return toast('Primero crea una cuenta');
-  $('scan-file').click();};
 
-$('scan-file').onchange=async e=>{
-  const f=e.target.files[0];if(!f)return;
-  $('scan-file').value='';
-  const b64=await new Promise((res,rej)=>{const r=new FileReader();
-    r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(f);});
-  $('scan-status').textContent='Leyendo la imagen...';
-  $('scan-res').innerHTML='';
-  const hoy=isoToday();
-  const prompt=`Esta es una captura de pantalla de movimientos bancarios o de tarjeta de credito.
-Extrae TODOS los movimientos que veas. Responde SOLO con un arreglo JSON, sin texto alrededor y sin markdown.
-Cada elemento: {"fecha":"YYYY-MM-DD","descripcion":"texto corto del comercio","monto":numero,"tipo":"gasto"|"ingreso"}
-Reglas: el monto siempre positivo y sin separadores de miles ni simbolos.
-Si la fecha no trae año usa el año de hoy (${hoy}). Si no ves fecha usa ${hoy}.
-Si un movimiento es un abono, pago recibido o deposito, tipo es "ingreso"; el resto es "gasto".
-Si no hay movimientos legibles responde [].`;
-  try{
-    const headers={'content-type':'application/json'};
-    const key=(DB.cfg.apiKey||'').trim();
-    if(key){headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';
-      headers['anthropic-dangerous-direct-browser-access']='true';}
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,
-      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1500,messages:[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}},
-        {type:'text',text:prompt}]}]})});
-    if(!r.ok){
-      $('scan-status').textContent=r.status===401||r.status===403
-        ?'La clave no es válida o falta. Escríbela abajo y vuelve a intentar.'
-        :'No se pudo leer la imagen (error '+r.status+').';
-      return;}
-    const data=await r.json();
-    const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
-    const m=txt.match(/\[[\s\S]*\]/);
-    const arr=JSON.parse(m?m[0]:'[]');
-    scan.items=arr.filter(x=>x&&+x.monto>0).map((x,i)=>({
-      id:'s'+i,fecha:/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')?x.fecha:hoy,
-      desc:String(x.descripcion||'').slice(0,60),
-      monto:Math.abs(+x.monto)||0,
-      t:x.tipo==='ingreso'?'in':'out',
-      cat:x.tipo==='ingreso'?'Otro':'Otro',on:true}));
-    $('scan-status').textContent=scan.items.length
-      ?'Encontré '+scan.items.length+' movimientos. Revisa la categoría y agrégalos.'
-      :'No reconocí movimientos en esa imagen.';
-    drawScan();
-  }catch(err){
-    $('scan-status').textContent='No se pudo leer la imagen. Revisa la clave o la conexión.';
-  }
-};
 function drawScan(){
   if(!scan.items.length){$('scan-res').innerHTML='';return;}
   const cats=CATS.out.map(([n])=>n),cin=CATS.in.map(([n])=>n);
@@ -2548,6 +2515,24 @@ $('exp-csv').onclick=()=>{
   download('bolsillo.csv','\uFEFF'+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(';')).join('\n'),'text/csv');};
 $('exp-json').onclick=()=>download('bolsillo-respaldo.json',JSON.stringify(DB),'application/json');
 $('imp-json').onclick=()=>$('fjson').click();
+$('imp-pegar').onclick=()=>{
+  if($('pegarbox').innerHTML){$('pegarbox').innerHTML='';return;}
+  $('pegarbox').innerHTML=`<div class="ed">
+    <div class="hint" style="margin:0 0 8px">Abre el archivo de respaldo, copia todo su
+      contenido y pégalo aquí. Sirve cuando el selector de archivos no deja escogerlo.</div>
+    <textarea id="pegar-txt" rows="4" style="width:100%;padding:10px 12px;border-radius:11px;
+      background:var(--bg);border:1px solid var(--line);font-size:12px;font-family:inherit;
+      color:var(--text);outline:none;resize:vertical" placeholder='{"mov":[...' ></textarea>
+    <button class="mini" id="pegar-ok" style="margin-top:8px;border-style:solid;color:var(--cta)">
+      Restaurar</button></div>`;
+  $('pegar-ok').onclick=async()=>{
+    try{
+      const x=JSON.parse($('pegar-txt').value.trim());
+      if(!x.mov)throw 0;
+      DB=migrate(x);applyTheme(DB.cfg.theme);await Store.save(DB);
+      fill();render();$('pegarbox').innerHTML='';toast('Respaldo restaurado');
+    }catch(e){toast('Ese texto no es un respaldo válido');}};
+};
 $('fjson').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=async()=>{try{const x=JSON.parse(r.result);if(!x.mov)throw 0;DB=migrate(x);
     applyTheme(DB.cfg.theme);await Store.save(DB);fill();render();toast('Respaldo restaurado');
@@ -2666,7 +2651,6 @@ function migrate(x){
   });
   if(!DB.cfg.fixed)DB.cfg.fixed=[];
   if(NATIVO){
-    $('mi-inbox').style.display='flex';
     try{const pend=JSON.parse(window.Android.pendientes()||'[]');
       if(pend.length)setTimeout(()=>toast(pend.length+' movimientos esperando en la bandeja'),900);
     }catch(e){}
