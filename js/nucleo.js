@@ -419,16 +419,21 @@ function cardSplit(card){
     if(!c||c.close.getTime()<=now)due.push(m);else next.push(m);
   });
   const sum=a=>a.reduce((s,m)=>s+pend(m),0);
-  /* cuenta lo realmente guardado, que puede ser parcial */
-  const guard=a=>a.reduce((s,m)=>s+Math.min(pend(m),+m.resMonto||(m.res?pend(m):0)),0);
-  const listo=guard(due)+guard(next);
-  const falta=(sum(due)+sum(next))-listo;
+  /* Lo que "ya tienes guardado" es el saldo REAL del bolsillo de la tarjeta.
+     Asi el numero de la tarjeta y el del bolsillo nunca se separan. */
+  const totalDebe=sum(due)+sum(next);
+  const B=balances();
+  const enBolsillo=(card.pocket&&resolve(card.pocket).kind!=='gone')
+    ?Math.max(0,B.bal[card.pocket]||0):0;
+  const listo=Math.min(enBolsillo,totalDebe);
+  const falta=Math.max(0,totalDebe-listo);
+  const marcado=[...due,...next].reduce((s,m)=>s+Math.min(pend(m),+m.resMonto||(m.res?pend(m):0)),0);
   let nextClose=null,nextPay=null;
   if(next.length){const c=cycleOf(card,next[0].ts);nextClose=c.close;nextPay=c.pay;}
   let payBy=null;
   if(due.length){const c=cycleOf(card,due[due.length-1].ts);payBy=c?c.pay:null;}
   return {due,next,dueTotal:sum(due),nextTotal:sum(next),payBy,nextClose,nextPay,
-    listo,falta,dueListo:sum(due.filter(m=>m.res))};
+    listo,falta,enBolsillo,marcado,totalDebe,dueListo:listo};
 }
 const inMonth=m=>{const x=new Date(m.ts);return x.getFullYear()===cursor.getFullYear()&&x.getMonth()===cursor.getMonth();};
 const monthMov=()=>DB.mov.filter(inMonth).sort((a,b)=>b.ts-a.ts);

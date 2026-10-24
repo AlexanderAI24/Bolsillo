@@ -321,7 +321,7 @@ function pintarAtajos(){
       else{const [a,pk]=String(g.src).split(':');
         if(DB.cfg.accounts.some(x=>x.id===a)){d.acc=a;d.sub=pk||null;}}
     }
-    $('note').value=g.nombre;
+    $('note').value=g.nombre;d.catManual=true;
     sync();
     if(navigator.vibrate)navigator.vibrate(10);
   });

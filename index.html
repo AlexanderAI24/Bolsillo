@@ -111,60 +111,37 @@ if('serviceWorker' in navigator){
     <div class="menu">
       <button class="mi" data-go="s-acc">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 012-2h11a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M16 12h3"/></svg></span>
-        <span class="n">Cuentas y bolsillos</span><span class="ch">›</span></button>
-      <button class="mi" data-go="s-card">
-        <span class="mic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/></svg></span>
-        <span class="n">Tarjetas de crédito</span><span class="ch">›</span></button>
-      <button class="mi" data-go="s-fix">
-        <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg></span>
-        <span class="n">Gastos fijos</span><span class="ch">›</span></button>
-
-      <button class="mi" data-go="s-scan">
-        <span class="mic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 15l5-4 4 3 3-2 6 4"/><circle cx="8.5" cy="9.5" r="1.3"/></svg></span>
-        <span class="n">Pegar texto del banco</span><span class="ch">›</span></button>
+        <span class="n">Cuentas, bolsillos y tarjetas</span><span class="ch">›</span></button>
       <button class="mi" data-go="s-style">
         <span class="mic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16"/></svg></span>
         <span class="n">Estilo visual</span><span class="ch">›</span></button>
-      <button class="mi" data-go="s-gen">
-        <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 3v18M8 7h6.5a2.5 2.5 0 010 5H9a2.5 2.5 0 000 5h7"/></svg></span>
-        <span class="n">Opciones generales</span><span class="ch">›</span></button>
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v36</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v37</div>
     </div>
   </section>
 
   <section id="v-s-acc" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
-    <div class="h" style="padding-top:10px"><div class="eyebrow">Cuentas y bolsillos</div></div>
+    <div class="h" style="padding-top:10px"><div class="eyebrow">Cuentas, bolsillos y tarjetas</div></div>
     <div class="set"><div id="acctedit"></div>
       <button class="btn" id="addacct">Agregar cuenta de banco</button>
       <button class="btn" id="addcash">Agregar efectivo</button>
-      <div class="hint" style="padding-bottom:24px">Aquí ves el saldo <b>de hoy</b>, ya con todos tus movimientos aplicados.
-        Si lo editas, la app cuadra la diferencia sola. Lo que apartes en bolsillos sale del disponible, no del total.</div></div>
-  </section>
+      <div class="hint">Aquí ves el saldo <b>de hoy</b>, ya con todos tus movimientos aplicados.
+        Si lo editas, la app cuadra la diferencia sola. Lo que apartes en bolsillos sale del disponible, no del total.</div>
 
-  <section id="v-s-card" style="display:none">
-    <button class="back" data-back="set">‹ Ajustes</button>
-    <div class="h" style="padding-top:10px"><div class="eyebrow">Tarjetas de crédito</div></div>
-    <div class="set"><div id="cardedit"></div>
+      <label>Tarjetas de crédito</label>
+      <div id="cardedit"></div>
       <button class="btn" id="addcard">Agregar tarjeta</button>
-      <div class="hint" style="padding-bottom:24px">Los últimos 4 dígitos sirven para que la app
-        reconozca sola de qué tarjeta es cada captura, sobre todo si usas Google Pay.
-        Pon el día de corte y el de pago para que la app sepa
-        qué compras entran a la factura de este mes y cuáles pasan a la siguiente.
-        El cupo es opcional: si lo pones, ves cuánto tienes libre.</div></div>
+      <div class="hint" style="padding-bottom:24px">Los últimos 4 dígitos dejan que la app reconozca
+        sola de qué tarjeta es cada captura. El día de corte y el de pago le dicen qué compras
+        entran a la factura de este mes.</div></div>
   </section>
 
-  <section id="v-s-fix" style="display:none">
-    <button class="back" data-back="set">‹ Ajustes</button>
-    <div class="h" style="padding-top:10px"><div class="eyebrow">Gastos fijos</div></div>
-    <div class="set"><div id="fixedit"></div>
-      <button class="btn" id="addfix">Agregar gasto fijo</button>
-      <div class="hint" style="padding-bottom:24px">Se registran solos cuando llega el día del mes que elijas.
-        Si abres la app días después, también se ponen al día. Cada uno se aplica una sola vez por mes.</div></div>
-  </section>
+  <section id="v-s-card" style="display:none"><div id="addcard"></div></section>
+
+  <section id="v-s-fix" style="display:none"><input type="file" id="fixedit" style="display:none"><div id="addfix"></div></section>
 
   <section id="v-s-inbox" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
@@ -185,22 +162,7 @@ if('serviceWorker' in navigator){
     </div>
   </section>
 
-  <section id="v-s-scan" style="display:none">
-    <button class="back" data-back="set">‹ Ajustes</button>
-    <div class="h" style="padding-top:10px"><div class="eyebrow">Pegar texto del banco</div></div>
-    <div class="set">
-      <label>Dónde se hicieron esos movimientos</label>
-      <select id="scan-src"></select>
-      <label>Pegar mensajes del banco</label>
-      <textarea id="scan-txt" rows="5" placeholder="Pega mensajes del banco, la lista de movimientos de Nu, BBVA o Google Pay, o tus bolsillos de Bancolombia."></textarea>
-      <button class="btn" id="scan-read" style="background:var(--cta);color:var(--on-cta);border-color:var(--cta)">Interpretar</button>
-      <div id="scan-status" class="hint"></div>
-      <div class="hint">Funciona sin conexión y sin clave. Entiende los SMS de Bancolombia y las
-        listas de movimientos de Nu, BBVA y Google Pay. Recuerda las categorías que ya asignaste
-        a cada comercio.</div>
-      <div id="scan-res"></div>
-    </div>
-  </section>
+  <section id="v-s-scan" style="display:none"><div id="scan-src"></div><div id="scan-txt"></div><div id="scan-read"></div><div id="scan-status"></div><div id="scan-res"></div></section>
 
   <section id="v-s-style" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
@@ -214,21 +176,7 @@ if('serviceWorker' in navigator){
     </div>
   </section>
 
-  <section id="v-s-gen" style="display:none">
-    <button class="back" data-back="set">‹ Ajustes</button>
-    <div class="h" style="padding-top:10px"><div class="eyebrow">Opciones generales</div></div>
-    <div class="set">
-      <label>Moneda</label>
-      <select id="cfg-cur">
-        <option value="COP">COP · peso colombiano</option><option value="USD">USD · dólar</option>
-        <option value="EUR">EUR · euro</option><option value="MXN">MXN · peso mexicano</option>
-        <option value="ARS">ARS · peso argentino</option><option value="PEN">PEN · sol</option>
-      </select>
-      <label>Presupuesto mensual de gasto</label>
-      <input id="cfg-budget" inputmode="decimal" data-money placeholder="0">
-      <div class="hint" style="padding-bottom:24px">El presupuesto aparece como barra en el Resumen. Déjalo en 0 para ocultarlo.</div>
-    </div>
-  </section>
+  <section id="v-s-gen" style="display:none"><div id="cfg-cur"></div><div id="cfg-budget"></div></section>
 
   <section id="v-s-back" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
@@ -291,8 +239,11 @@ if('serviceWorker' in navigator){
   </div>
   <div id="atajos"></div>
   <div id="warnbox"></div>
-  <div class="cats" id="cats"></div>
-  <div class="nt"><input id="note" placeholder="Nota corta (opcional)" maxlength="60"></div>
+  <div class="nt">
+    <input id="note" placeholder="¿En qué fue? Ej: mercado en el Ara" maxlength="60">
+    <div id="clasif"></div>
+  </div>
+  <div class="cats" id="cats" style="display:none"></div>
   <div class="pad" id="pad"></div>
   <div class="foot"><button class="cx" id="close">✕</button><button class="ok" id="save" disabled>Guardar</button></div>
 </div>

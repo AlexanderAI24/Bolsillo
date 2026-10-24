@@ -1,4 +1,4 @@
-const CACHE='bolsillo-v36';
+const CACHE='bolsillo-v37';
 const FILES=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png',
   './css/app.css','./js/nucleo.js','./js/vistas.js','./js/registro.js',
   './js/lectura.js','./js/tarjetas.js','./js/app.js'];

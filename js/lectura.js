@@ -33,6 +33,97 @@ const REGLAS=[
  {id:'Google Pay',re:/^(?:cop|usd|\$)\s?([\d.,]+)[\s\S]{0,60}?\b(?:en|at)\s+(.+?)(?:\n|$)/i,
   arma:m=>({t:'out',amount:montoSMS(m[1]),desc:limpiaTxt(m[2])})},
 ];
+/* ===== vocabulario para clasificar por lo que escribes en la nota =====
+   Se lee de arriba hacia abajo: gana la primera que coincida.
+   Las reglas que tú vas confirmando pesan más que esto. */
+const VOCAB=[
+ ['Mercado',       ['mercado','supermerc','exito','jeronimo','jerónimo','d1','tienda d1','ara','ísimo',
+                    'carulla','olimpica','olímpica','euro','makro','justo','zapatoca','colsubsidio',
+                    'surtimax','consumo','granero','fruver','verdura','carniceria','carnicería','huevos',
+                    'canasta','despensa','abarrotes','la vaquita','mercar']],
+ ['Restaurante',   ['restaurante','almuerzo','almorzar','cena','cenar','desayuno','comida en','comimos',
+                    'burger','hamburguesa','pizza','sushi','asado','bandeja','corrientazo','mcdonald',
+                    'kfc','frisby','crepes','sandwich','sánduche','empanada','panaderia','panadería',
+                    'cafe','café','juan valdez','tostao','starbucks','postre','helado','bar ','cerveza',
+                    'salchipapa','perro caliente','arepa','comida rapida','comida rápida']],
+ ['Domicilios',    ['rappi','domicilio','ifood','didi food','pedidosya','uber eats','entrega a domicilio']],
+ ['Transporte',    ['uber','didi','cabify','indriver','taxi','bus','metro','transmilenio','pasaje',
+                    'peaje','flypass','gasolina','gasofa','terpel','texaco','biomax','primax','mobil',
+                    'estacion de servicio','estación de servicio','parqueadero','parqueo','tanquear',
+                    'combustible','acpm','pico y placa','grua','grúa','soat','tecnomecanica','tecnomecánica']],
+ ['Carro',         ['carro','vehiculo','vehículo','taller','mecanico','mecánico','llantas','aceite',
+                    'lavada de carro','lavado de carro','repuesto','bateria del carro','batería del carro',
+                    'alineacion','alineación','frenos','mantenimiento carro','moto','motocicleta']],
+ ['Arriendo',      ['arriendo','alquiler','renta del apartamento','canon']],
+ ['Hogar',         ['hogar','cuota del hogar','casa','mercado del hogar','ferreteria','ferretería',
+                    'homecenter','easy','muebles','decoracion','decoración','cortinas','colchon','colchón',
+                    'electrodomestico','electrodoméstico','olla','sarten','sartén','utensilio']],
+ ['Servicios',     ['servicios','epm','empresas publicas','empresas públicas','energia','energía','luz',
+                    'agua','acueducto','alcantarillado','gas','internet','wifi','claro','movistar','tigo',
+                    'comcel','etb','une','factura de','recibo de','celular plan','recarga','minutos',
+                    'administracion','administración']],
+ ['Salud',         ['salud','medico','médico','cita medica','cita médica','consulta','eps','clinica',
+                    'clínica','hospital','droguería','drogueria','farmacia','cruz verde','la rebaja',
+                    'farmatodo','medicamento','pastillas','examen','laboratorio','odontolog','dentista',
+                    'optica','óptica','gafas','psicolog','terapia','vacuna','ips','urgencias']],
+ ['Gimnasio',      ['gimnasio','gym','smart fit','smartfit','bodytech','stark','crossfit','entrenador',
+                    'mensualidad gym','proteina','proteína','suplemento']],
+ ['Suscripciones', ['suscripcion','suscripción','netflix','spotify','disney','hbo','max','prime video',
+                    'youtube premium','apple','icloud','drive','office','canva','chatgpt','claude',
+                    'plan mensual','membresia','membresía']],
+ ['Ocio',          ['ocio','cine','teatro','concierto','fiesta','rumba','salida','juego','videojuego',
+                    'steam','playstation','xbox','nintendo','parque','entrada','boleta','paseo','piscina',
+                    'bolos','billar','karaoke']],
+ ['Viajes',        ['viaje','vuelo','avion','avión','tiquete','hotel','hospedaje','airbnb','hostal',
+                    'avianca','latam','wingo','maleta','turismo','excursion','excursión','finca']],
+ ['Ropa',          ['ropa','camisa','camiseta','pantalon','pantalón','zapatos','tenis','zapatillas',
+                    'vestido','chaqueta','ropa interior','medias','miniso','dollarcity','falabella',
+                    'zara','h&m','adidas','nike','arturo calle','koaj','temu','shein','accesorio','gorra']],
+ ['Tecnología',    ['tecnologia','tecnología','computador','portatil','portátil','celular','telefono',
+                    'teléfono','audifonos','audífonos','cargador','cable','mouse','teclado','monitor',
+                    'disco','memoria','usb','impresora','ktronix','alkosto','falabella tecno','mercado libre']],
+ ['Educación',     ['educacion','educación','curso','universidad','semestre','matricula','matrícula',
+                    'libro','diplomado','certificacion','certificación','clase','ingles','inglés',
+                    'platzi','udemy','coursera','colegio','pension del colegio','pensión del colegio',
+                    'utiles','útiles','papeleria','papelería']],
+ ['Familia',       ['familia','mama','mamá','papa','papá','hermano','hermana','hijo','hija','sobrino',
+                    'abuela','abuelo','esposa','novia','raquel','regalo para','cumpleanos','cumpleaños',
+                    'mesada','ayuda a']],
+ ['Iglesia',       ['iglesia','diezmo','ofrenda','donacion','donación','primicia']],
+ ['Aseo',          ['aseo','limpieza','detergente','jabon','jabón','shampoo','papel higienico',
+                    'papel higiénico','escoba','trapeador','senora del aseo','señora del aseo',
+                    'empleada','lavanderia','lavandería','peluqueria','peluquería','barberia','barbería',
+                    'corte de pelo','manicure','cosmetico','cosmético','crema','desodorante']],
+ ['Personal',      ['personal','mi gusto','antojo','capricho','para mi','para mí']],
+ ['Salario',       ['salario','nomina','nómina','sueldo','pago de nomina','pago de nómina','quincena']],
+ ['Freelance',     ['freelance','proyecto','trabajo extra','asesoria','asesoría','consultoria','consultoría']],
+ ['Reembolso',     ['reembolso','devolucion','devolución','me devolvieron','reintegro de']],
+ ['Regalo',        ['regalo','obsequio','me regalaron']],
+ ['Venta',         ['venta','vendi','vendí','vendido']]
+];
+/* índice rápido: palabra -> categoría */
+const VOCAB_IDX=(()=>{const m=new Map();
+  VOCAB.forEach(([cat,palabras])=>palabras.forEach(p=>{if(!m.has(p))m.set(p,cat);}));
+  return m;})();
+/* Clasifica por la nota. Devuelve la categoría y qué palabra la disparó. */
+function clasificar(texto,tipo){
+  const t=' '+String(texto||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ')+' ';
+  const validas=(tipo==='in'?CATS.in:CATS.out).map(([n])=>n);
+  /* gana lo que se menciona primero; si empatan, la palabra más específica */
+  let mejor=null,pos=1e9,largo=0;
+  for(const [palabra,cat] of VOCAB_IDX){
+    if(!validas.includes(cat))continue;
+    const p=' '+palabra.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ');
+    const i=t.indexOf(p);
+    if(i<0)continue;
+    if(i<pos||(i===pos&&palabra.length>largo)){mejor={cat,palabra};pos=i;largo=palabra.length;}
+  }
+  return mejor;
+}
+
 const PISTAS=[[/exito|jeronimo|d1|ara|carulla|olimpica|euro|mercado|supermerc/i,'Mercado'],
  [/rappi|domicilio/i,'Domicilios'],[/miniso|dollarcity|falabella|zara|temu/i,'Ropa'],
  [/uber|didi|cabify|taxi|flypass|peaje|terpel|gasolin|estacion/i,'Transporte'],
@@ -42,6 +133,8 @@ const PISTAS=[[/exito|jeronimo|d1|ara|carulla|olimpica|euro|mercado|supermerc/i,
  [/drogueria|farmacia|eps|clinica|medic/i,'Salud'],
  [/cine|bar |restaurante|burger|pizza|mcdonald|frisby|crepes/i,'Restaurante']];
 function categoriza(desc,t){
+  const v=clasificar(desc,t);
+  if(v)return v.cat;
   if(t==='in')return 'Otro';
   for(const [re,c] of PISTAS)if(re.test(desc))return c;
   return 'Otro';

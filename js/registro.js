@@ -7,8 +7,9 @@ function openSheet(t){
      date:isoToday(),editId:null};
   if(d.t==='pay'){d.cat='Pago tarjeta';d.dst=DB.cfg.cards[0]&&DB.cfg.cards[0].id;}
   if(d.t==='move')d.cat='Traslado';
-  verTodasCats=false;
-  $('note').value='';$('cur').textContent=SYM[DB.cfg.cur];
+  verTodasCats=false;d.catManual=false;d.verCats=false;d.pista=null;
+  $('note').value='';if($('clasif'))$('clasif').innerHTML='';
+  $('cur').textContent=SYM[DB.cfg.cur];
   $('save').textContent='Guardar';
   sync();$('sheet').classList.add('open');$('sheet').scrollTop=0;repisar();
 }
@@ -31,6 +32,7 @@ async function editMov(id){
   if(m.t==='move'){d.acc=m.src;}
   if(m.owner&&m.owner!==m.src){d.ownerOpen=true;d.owner=m.owner;}
   $('note').value=m.note||'';
+  d.catManual=true;d.verCats=false;
   $('save').textContent='Guardar cambios';
   sync();
 }
@@ -96,8 +98,9 @@ function sync(){
     $('src').innerHTML=F.length>4?dobleSelector('paydesde',d.acc,'Cuenta'):chip(F,d.acc,'s');
     $('rsub').style.display='none';$('rowner').style.display='none';$('rdst').style.display='block';
     $('k3').textContent='Tarjeta';$('owneroff').style.display='none';$('dst').innerHTML=chip(cards,d.dst,'d');}
-  $('cats').style.display=(d.t==='pay')?'none':'flex';
-  $('cats').innerHTML=chipsCategoria(CATS[d.t]||[],d.cat,d.t);
+  $('cats').style.display=(d.t!=='pay'&&d.verCats)?'flex':'none';
+  if(d.verCats)$('cats').innerHTML=chipsCategoria(CATS[d.t]||[],d.cat,d.t);
+  pintarClasif();
   $('warnbox').innerHTML=(d.t==='out'&&d.ownerOpen&&d.owner&&d.owner!==srcRef())
     ?`<div class="warn">Pagas con <b>${nameOf(srcRef())}</b> algo que corresponde a <b>${nameOf(d.owner)}</b>.
       Queda como deuda entre bolsillos y la saldas cuando quieras.</div>`:'';
@@ -116,7 +119,8 @@ function sync(){
   const val=amtVal();
   $('amt').textContent=d.amt?d.amt.replace(/^(\d+)/,x=>grp(x)):'0';
   const needDst=(d.t==='move'||d.t==='pay');
-  $('save').disabled=!(val>0&&d.acc&&(d.cat||d.t==='pay')&&(!needDst||d.dst));
+  const nota=($('note').value||'').trim();
+  $('save').disabled=!(val>0&&d.acc&&(nota||d.t==='pay')&&(!needDst||d.dst));
 }
 const amtVal=()=>parseFloat(String(d.amt||'0').replace(',','.'))||0;
 $('pad').innerHTML=['1','2','3','4','5','6','7','8','9',',','0','del','000']
@@ -175,6 +179,27 @@ document.querySelectorAll('.drow [data-day]').forEach(b=>b.onclick=()=>{
   const t=new Date();t.setDate(t.getDate()-(+b.dataset.day));d.date=isoOf(t);sync();});
 $('owneron').onclick=()=>{d.ownerOpen=true;sync();};
 $('owneroff').onclick=()=>{d.ownerOpen=false;d.owner=null;sync();};
+/* lee la nota, propone categoría y la muestra */
+function pintarClasif(){
+  if(!$('clasif'))return;
+  if(d.t==='pay'){$('clasif').innerHTML='';return;}
+  const nota=($('note')&&$('note').value||'').trim();
+  if(!d.catManual){
+    const v=clasificar(nota,d.t);
+    d.cat=v?v.cat:(nota?'Otro':null);
+    d.pista=v?v.palabra:null;
+  }
+  if(!nota){
+    $('clasif').innerHTML=`<div class="clasif aviso">Escribe en qué fue el movimiento.
+      Con eso la app le pone la categoría sola.</div>`;return;}
+  const i=CATICON[d.cat]||'dots';
+  $('clasif').innerHTML=`<div class="clasif">
+    <span class="cic">${I[i]}</span>
+    <span class="ctx">${d.cat||'Otro'}${d.catManual?' · elegida por ti'
+      :(d.pista?' · por "'+d.pista+'"':' · no la reconocí')}</span>
+    <button id="cambiar-cat">${d.verCats?'listo':'cambiar'}</button></div>`;
+  $('cambiar-cat').onclick=()=>{d.verCats=!d.verCats;sync();};
+}
 let verTodasCats=false;
 /* ordena por lo que mas usas y deja el resto detras de un boton */
 function usoDeCategorias(tipo){
@@ -198,10 +223,15 @@ function chipsCategoria(lista,sel,tipo){
       ?`<button class="cb mas" data-mas="1">+${faltan} más</button>`
       :(verTodasCats?`<button class="cb mas" data-mas="0">Ver menos</button>`:''));
 }
+$('note').addEventListener('input',()=>{d.catManual=false;pintarClasif();
+  const val=amtVal(),nota=($('note').value||'').trim();
+  const needDst=(d.t==='move'||d.t==='pay');
+  $('save').disabled=!(val>0&&d.acc&&(nota||d.t==='pay')&&(!needDst||d.dst));});
 $('cats').onclick=e=>{
   const mas=e.target.closest('[data-mas]');
   if(mas){verTodasCats=mas.dataset.mas==='1';sync();return;}
-  const b=e.target.closest('[data-c]');if(!b)return;d.cat=b.dataset.c;sync();};
+  const b=e.target.closest('[data-c]');if(!b)return;
+  d.cat=b.dataset.c;d.catManual=true;d.verCats=false;sync();};
 $('open').onclick=async()=>{
   if(!DB.cfg.accounts.length){
     const r=await modal({title:'Primero una cuenta',

@@ -403,3 +403,19 @@ section{position:relative;}
   border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--text);
   outline:none;min-height:44px;}
 .dcampo select:focus{border-color:var(--cta);}
+
+/* ===== categoría deducida de la nota ===== */
+.clasif{display:flex;align-items:center;gap:var(--s2);margin-top:var(--s2);
+  padding:var(--s2) var(--s3);border-radius:var(--r2);background:var(--surface);
+  border:1px solid var(--line);min-height:44px;}
+.clasif.aviso{color:var(--text-dim);font-size:12.5px;line-height:1.45;
+  border-style:dashed;display:block;}
+.clasif .cic{flex:none;display:grid;place-items:center;width:26px;height:26px;}
+.clasif .cic svg{width:17px;height:17px;stroke:var(--cta);stroke-width:1.9;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;}
+.clasif .ctx{flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.clasif button{flex:none;font-size:12.5px;font-weight:700;color:var(--cta);
+  padding:var(--s1) var(--s2);}
+.buy .ba i{display:block;font-style:normal;font-size:10.5px;font-weight:600;
+  color:var(--text-dim);margin-top:2px;}

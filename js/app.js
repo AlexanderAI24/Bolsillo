@@ -16,8 +16,7 @@ function go(v,desdeAtras){
   const tab=v.startsWith('s-')||v==='set'?'set':(v==='planedit'?'plan':(v==='cards'?'home':v));
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===tab));
   if(v==='planedit')renderPlanEdit();
-  if(v==='s-acc')renderAccts();
-  if(v==='s-card')renderCardEdit();
+  if(v==='s-acc'){renderAccts();renderCardEdit();}
   if(v==='s-style'){renderThemes();renderPaleta();}
   if(v==='s-fix')renderFixed();
   if(v==='s-scan')renderScan();
