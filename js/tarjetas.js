@@ -93,8 +93,7 @@ function montoDe(m){
 }
 function syncPay(){
   document.querySelectorAll('#pay-mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===pay.mode));
-  $('pay-src').innerHTML=flat().map(o=>`<button data-ps="${o.id}" class="${pay.src===o.id?'on':''}">
-    <i class="bulb" style="background:${o.c}"></i>${o.n}</button>`).join('');
+  $('pay-src').innerHTML=dobleSelector('paysrc',pay.src,'Cuenta');
   const sp=cardSplit(pay.card);
   if(pay.mode==='sel'){
     const blk=(t,arr)=>arr.length?`<div class="grp">${t}</div>`+arr.map(m=>{
@@ -106,7 +105,10 @@ function syncPay(){
           <button class="bk"></button>
           <div class="bm"><div class="bn">${m.cat}${m.note?' · '+m.note:''}</div>
             <div class="bd">${DFMT(new Date(m.ts))}${c?' · vence '+DFMT(c.pay):''}</div>
-            <button class="rz ${m.res?'on':''}" data-res="${m.id}">${m.res?'✓ En bolsillo':'Sin guardar'}</button></div>
+            <button class="rz ${m.res?'on':''}" data-res="${m.id}">${
+            !m.res?'Sin guardar'
+            :(resDe(m)<pend(m)-0.009?'◐ '+money(resDe(m))+' guardados'
+            :'✓ En bolsillo')}</button></div>
           <div class="ba num">${money(pend(m))}</div>
         </div>
         ${marcada?`<div class="abono">
@@ -164,14 +166,30 @@ function syncPay(){
     ?(pay.amt?pay.amt.replace(/^(\d+)/,x=>grp(x)):'0'):fmt(t);
   $('pay-ok').disabled=!(t>0&&pay.src);
 }
+/* cuanto de esta compra ya tienes guardado */
+const resDe=m=>Math.min(pend(m),+m.resMonto||0);
 async function toggleRes(m){
   const card=DB.cfg.cards.find(c=>c.id===m.src);if(!card)return;
-  /* desmarcar: se deshace el traslado que hizo la app */
-  if(m.res){
-    if(m.resMovId)DB.mov=DB.mov.filter(x=>x.id!==m.resMovId);
-    m.res=false;m.resMovId=null;
-    await Store.save(DB);syncPay();render();
-    toast(m.resMovId===null?'Se deshizo el apartado':'Marcada como sin guardar');return;}
+  const yaGuardado=resDe(m);
+  const falta=pend(m)-yaGuardado;
+
+  /* si ya hay algo guardado, preguntamos qué hacer */
+  if(yaGuardado>0.009){
+    const opciones=[];
+    if(falta>0.009)opciones.push({id:'mas',n:'Guardar '+money(falta)+' más',extra:'completar'});
+    opciones.push({id:'quitar',n:'Quitar el respaldo',extra:money(yaGuardado)});
+    const q=await modalPick({title:'Ya guardaste '+money(yaGuardado),
+      text:`De esta compra de <b>${money(pend(m))}</b> ya tienes apartado
+        <b>${money(yaGuardado)}</b>${falta>0.009?', faltan '+money(falta):' (completa)'}.`,
+      options:opciones});
+    if(!q)return;
+    if(q==='quitar'){
+      (m.resMovs||[]).forEach(id=>{DB.mov=DB.mov.filter(x=>x.id!==id);});
+      if(m.resMovId)DB.mov=DB.mov.filter(x=>x.id!==m.resMovId);
+      m.res=false;m.resMonto=0;m.resMovs=[];m.resMovId=null;
+      await Store.save(DB);syncPay();render();
+      return toast('Respaldo deshecho');}
+  }
 
   const destino=card.pocket&&resolve(card.pocket).kind!=='gone'?card.pocket:null;
   if(!destino){
@@ -183,18 +201,27 @@ async function toggleRes(m){
     m.res=true;m.resMovId=null;await Store.save(DB);syncPay();render();
     toast('Marcada, pero sin mover plata');return;}
 
-  const B=balances(),monto=pend(m);
+  const B=balances();
+  /* primero cuánto vas a guardar: puede ser una parte */
+  const rm=await modal({title:'¿Cuánto vas a guardar?',
+    text:`Esta compra debe <b>${money(pend(m))}</b>${yaGuardado>0.009
+      ?' y ya tienes '+money(yaGuardado):''}. Puedes apartar solo una parte.`,
+    input:true,value:falta>0.009?falta:pend(m),ok:'Continuar'});
+  if(rm.action!=='ok')return;
+  const monto=Math.min(falta>0.009?falta:pend(m),rm.value||0);
+  if(monto<=0.009)return toast('Escribe un monto');
+
   const ops=[{id:'YA',n:'Ya lo aparté yo mismo',extra:'no mover nada'}]
     .concat(flat().filter(x=>x.id!==destino)
       .map(x=>({id:x.id,n:x.n,extra:money(B.bal[x.id]||0)})));
   const origen=await modalPick({title:'¿De dónde sale la plata?',
-    text:`Se van a apartar <b>${money(monto)}</b> hacia ${resolve(destino).name}, el bolsillo de ${card.name}.
-      Si ya hiciste ese traslado tú mismo, elige la primera opción.`,
+    text:`Se van a apartar <b>${money(monto)}</b> hacia ${resolve(destino).name}, el bolsillo de ${card.name}.`,
     options:ops});
   if(!origen)return;
   if(origen==='YA'){
-    m.res=true;m.resMovId=null;await Store.save(DB);syncPay();render();
-    return toast('Marcada. No se movió plata.');}
+    m.res=true;m.resMonto=yaGuardado+monto;m.resMovs=m.resMovs||[];
+    await Store.save(DB);syncPay();render();
+    return toast('Marcados '+money(monto)+'. No se movió plata.');}
   if((B.bal[origen]||0)<monto){
     const r=await modal({title:'No alcanza',
       text:`${nameOf(origen)} tiene ${money(B.bal[origen]||0)} y necesitas ${money(monto)}. ¿Lo hago igual?`,
@@ -202,13 +229,28 @@ async function toggleRes(m){
     if(r.action!=='ok')return;}
   const id='rs'+Date.now()+Math.floor(Math.random()*99);
   DB.mov.push({id,ts:Date.now(),t:'move',src:origen,dst:destino,amount:monto,
-    cat:'Apartado',note:'Respaldo '+card.name});
-  m.res=true;m.resMovId=id;
+    cat:'Apartado',note:'Respaldo '+(m.note||m.cat||card.name)});
+  m.res=true;
+  m.resMonto=yaGuardado+monto;
+  m.resMovs=(m.resMovs||[]).concat([id]);
   await Store.save(DB);syncPay();render();
-  toast(money(monto)+' apartados en '+resolve(destino).name);
+  const resta=pend(m)-m.resMonto;
+  toast(resta>0.009
+    ?money(monto)+' guardados · faltan '+money(resta)
+    :money(monto)+' guardados · esta compra queda cubierta');
 }
 $('pay-mode').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;pay.mode=b.dataset.m;syncPay();};
-$('pay-src').onclick=e=>{const b=e.target.closest('[data-ps]');if(!b)return;pay.src=b.dataset.ps;syncPay();};
+$('pay-src').addEventListener('change',e=>{
+  const parte=e.target.dataset.parte;
+  if(parte==='cuenta'){
+    /* al cambiar de cuenta hay que volver a listar sus bolsillos */
+    pay.src=e.target.value;
+    $('pay-src').innerHTML=dobleSelector('paysrc',pay.src,'Cuenta');
+  }else{
+    const r=refDoble('paysrc');if(r)pay.src=r;
+  }
+  const t=payTotal();
+  $('pay-ok').disabled=!(t>0&&pay.src);});
 $('pay-close').onclick=()=>$('paysheet').classList.remove('open');
 $('pay-x').onclick=()=>$('paysheet').classList.remove('open');
 $('sheet-x').onclick=()=>$('sheet').classList.remove('open');

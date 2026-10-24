@@ -1,5 +1,6 @@
 /* ============ capturador ============ */
-const srcRef=()=>(d.t==='out'||d.t==='in')&&d.acc&&!isCard(d.acc)?d.acc+(d.sub?':'+d.sub:''):d.acc;
+const srcRef=()=>(d.t==='out'||d.t==='in')&&d.acc&&!isCard(d.acc)
+  ?d.acc+(d.sub?':'+d.sub:''):d.acc;
 function openSheet(t){
   const a0=DB.cfg.accounts[0];
   d={t:t||'out',amt:'',acc:a0?a0.id:null,sub:null,dst:null,owner:null,cat:null,ownerOpen:false,
@@ -83,14 +84,16 @@ function sync(){
       $('dst').innerHTML=chip(F.filter(x=>x.id!==srcRef()),d.owner,'d');}
   }else if(d.t==='move'){
     $('k1').textContent='Sale de';
-    $('src').innerHTML=F.length>4?selector(F,d.acc,'s'):chip(F,d.acc,'s');
+    $('src').innerHTML=F.length>4?dobleSelector('movsrc',d.acc,'Cuenta'):chip(F,d.acc,'s');
     $('rsub').style.display='none';$('rowner').style.display='none';$('rdst').style.display='block';
     $('k3').textContent='Entra a';$('owneroff').style.display='none';
     const dest=F.filter(x=>x.id!==d.acc);
-    $('dst').innerHTML=dest.length>4?selector(dest,d.dst,'d'):chip(dest,d.dst,'d');
+    $('dst').innerHTML=dest.length>4?dobleSelector('movdst',d.dst||dest[0].id,'Cuenta')
+      :chip(dest,d.dst,'d');
+    if(dest.length>4&&!d.dst)d.dst=refDoble('movdst');
   }else{
     $('k1').textContent='Pago desde';
-    $('src').innerHTML=F.length>4?selector(F,d.acc,'s'):chip(F,d.acc,'s');
+    $('src').innerHTML=F.length>4?dobleSelector('paydesde',d.acc,'Cuenta'):chip(F,d.acc,'s');
     $('rsub').style.display='none';$('rowner').style.display='none';$('rdst').style.display='block';
     $('k3').textContent='Tarjeta';$('owneroff').style.display='none';$('dst').innerHTML=chip(cards,d.dst,'d');}
   $('cats').style.display=(d.t==='pay')?'none':'flex';
@@ -145,8 +148,23 @@ function elegir(valor,cual){
   sync();
 }
 ['src','sub','dst'].forEach(id=>$(id).addEventListener('change',e=>{
-  const sel=e.target.closest('[data-sel]');if(!sel)return;
-  elegir(sel.value,sel.dataset.sel);}));
+  const sel=e.target.closest('[data-sel]');
+  if(sel){elegir(sel.value,sel.dataset.sel);return;}
+  /* selector de dos pasos */
+  const dob=e.target.closest('[data-dob]');
+  if(!dob)return;
+  const cual=dob.dataset.dob;
+  if(dob.dataset.parte==='cuenta'){
+    /* al cambiar de cuenta se recarga la lista de bolsillos */
+    if(cual==='movdst')d.dst=dob.value; else d.acc=dob.value;
+    const cont=cual==='movdst'?'dst':'src';
+    $(cont).innerHTML=dobleSelector(cual,dob.value,'Cuenta');
+  }else{
+    const ref=refDoble(cual);
+    if(cual==='movdst')d.dst=ref; else {d.acc=ref;d.sub=null;}
+  }
+  if(d.t==='move'&&d.dst===d.acc)d.dst=null;
+  sync();}));
 $('src').onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;
   d.acc=b.dataset.s;d.sub=null;d.owner=null;if(d.dst===d.acc)d.dst=null;sync();};
 $('sub').onclick=e=>{const b=e.target.closest('[data-p]');if(!b)return;d.sub=b.dataset.p||null;d.owner=null;sync();};
@@ -277,12 +295,26 @@ function cargarBandeja(){
       if(dup==='exacto'){ya++;return;}
       const o=detectarOrigen(c.texto);
       bandeja.push({id:c.id,idx:k,app:c.app,fecha:r.fecha,desc:r.desc,
+        origenDetectado:(typeof o==='string'),
         monto:r.monto,t:r.t,cat:categoriaDe(r.desc,r.t),regla:r.regla,ref,
         on:dup!=='probable',repetido:dup==='probable',
         src:(typeof o==='string')?o:(flat()[0]||{}).id,dst:null,pagoDesde:(flat()[0]||{}).id,
         raw:c.texto.slice(0,80)});
     });
   });
+  /* si la captura no dice de que tarjeta o cuenta es, se pregunta una sola vez */
+  const sinOrigen=bandeja.length&&!bandeja[0].origenDetectado;
+  $('inb-origen').innerHTML=bandeja.length?`
+    <div class="ed" style="margin-top:0">
+      <div class="hd"><span>${sinOrigen?'¿De dónde son estos movimientos?':'Origen detectado'}</span></div>
+      ${sinOrigen?'<div class="hint" style="margin:0 0 8px">No pude reconocerlo solo. Elígelo y se aplica a todos.</div>':''}
+      <select id="inb-todos">
+        ${DB.cfg.cards.map(c=>`<option value="${c.id}" ${bandeja[0].src===c.id?'selected':''}>${c.name} (tarjeta)</option>`).join('')}
+        ${flat().map(o=>`<option value="${o.id}" ${bandeja[0].src===o.id?'selected':''}>${o.n}</option>`).join('')}
+      </select>
+    </div>`:'';
+  if($('inb-todos'))$('inb-todos').onchange=()=>{
+    bandeja.forEach(x=>x.src=$('inb-todos').value);drawInbox();};
   $('inb-status').textContent=bandeja.length
     ?bandeja.length+' por revisar'+(ya?' · '+ya+' ya estaban':'')
     :(crudos.length?(sin?'No entendí lo que llegó. Mira abajo qué leyó la app.':'Nada nuevo'):'Todavía no ha llegado nada.');
@@ -386,4 +418,13 @@ $('inb-log').onclick=()=>{
 };
 window.onMensajesNuevos=()=>{if(NATIVO&&$('v-s-inbox').style.display==='block')cargarBandeja();};
 /* la app Android llama esto cuando le compartes algo */
-window.abrirBandeja=()=>{if(!NATIVO)return;go('s-inbox');};
+window.abrirBandeja=()=>{
+  if(!NATIVO)return;
+  /* cierra lo que este encima: si no, la captura queda escondida detras */
+  const m=document.getElementById('modal'); if(m)m.classList.remove('on');
+  const p=document.getElementById('paysheet'); if(p)p.classList.remove('open');
+  const s=document.getElementById('sheet'); if(s)s.classList.remove('open');
+  saldos.filas=[];saldos.msgId=null;
+  go('s-inbox');
+  cargarBandeja();
+};

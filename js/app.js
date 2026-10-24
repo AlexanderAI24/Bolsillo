@@ -18,7 +18,7 @@ function go(v,desdeAtras){
   if(v==='planedit')renderPlanEdit();
   if(v==='s-acc')renderAccts();
   if(v==='s-card')renderCardEdit();
-  if(v==='s-style')renderThemes();
+  if(v==='s-style'){renderThemes();renderPaleta();}
   if(v==='s-fix')renderFixed();
   if(v==='s-scan')renderScan();
   if(v==='s-inbox')renderInbox();
@@ -181,6 +181,49 @@ $('addcard').onclick=async()=>{
   await Store.save(DB);renderCardEdit();render();};
 
 /* ============ estilo y general ============ */
+/* ---- paleta propia: se ajusta un color a la vez sobre la base elegida ---- */
+function colorActual(k){
+  const mios=DB.cfg.colores||{};
+  if(mios[k])return aHex(mios[k]);
+  const th=THEMES.find(x=>x.id===DB.cfg.theme)||THEMES[1];
+  return aHex(th.t[k]);
+}
+function renderPaleta(){
+  const mios=DB.cfg.colores||{};
+  const tocados=Object.keys(mios).filter(k=>mios[k]).length;
+  $('paleta').innerHTML=`
+    <div class="ed" style="margin-top:0">
+      <div class="hd"><span>Tus colores</span>
+        ${tocados?`<button id="pal-reset">Volver a la base</button>`:''}</div>
+      <div class="hint" style="margin:0 0 10px">Cambia uno a la vez. Lo que no toques
+        se queda como en la paleta que elegiste arriba.</div>
+      ${RETOQUES.map(r=>`
+        <div class="colfila">
+          <label for="col-${r.k.replace('--','')}">${r.n}</label>
+          <span class="colval">${colorActual(r.k).toUpperCase()}</span>
+          <input type="color" id="col-${r.k.replace('--','')}" data-col="${r.k}"
+            value="${colorActual(r.k)}">
+          ${mios[r.k]?`<button class="colx" data-colx="${r.k}" title="quitar">✕</button>`:''}
+        </div>`).join('')}
+    </div>`;
+  $('paleta').querySelectorAll('[data-col]').forEach(inp=>{
+    inp.oninput=()=>{
+      DB.cfg.colores=DB.cfg.colores||{};
+      DB.cfg.colores[inp.dataset.col]=inp.value;
+      applyTheme(DB.cfg.theme);
+      const v=inp.parentElement.querySelector('.colval');
+      if(v)v.textContent=inp.value.toUpperCase();
+    };
+    inp.onchange=async()=>{await Store.save(DB);renderPaleta();render();};
+  });
+  $('paleta').querySelectorAll('[data-colx]').forEach(b=>b.onclick=async()=>{
+    delete DB.cfg.colores[b.dataset.colx];
+    applyTheme(DB.cfg.theme);await Store.save(DB);renderPaleta();render();});
+  if($('pal-reset'))$('pal-reset').onclick=async()=>{
+    DB.cfg.colores={};applyTheme(DB.cfg.theme);await Store.save(DB);
+    renderPaleta();render();toast('Colores de la paleta restaurados');};
+}
+
 function renderThemes(){
   $('themes').innerHTML=THEMES.map(t=>`
     <button class="th ${DB.cfg.theme===t.id?'on':''}" data-th="${t.id}">
@@ -192,7 +235,8 @@ function renderThemes(){
       <div class="chk"></div></button>`).join('');
 }
 $('themes').onclick=async e=>{const b=e.target.closest('[data-th]');if(!b)return;
-  DB.cfg.theme=b.dataset.th;applyTheme(DB.cfg.theme);renderThemes();await Store.save(DB);render();toast('Estilo aplicado');};
+  DB.cfg.theme=b.dataset.th;applyTheme(DB.cfg.theme);
+  renderThemes();renderPaleta();await Store.save(DB);render();toast('Estilo aplicado');};
 $('cfg-cur').onchange=async()=>{DB.cfg.cur=$('cfg-cur').value;await Store.save(DB);render();};
 $('cfg-budget').onchange=async()=>{DB.cfg.budget=clean($('cfg-budget').value);await Store.save(DB);render();};
 

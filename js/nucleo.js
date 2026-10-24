@@ -44,10 +44,79 @@ const THEMES=[
      '--cta-lt':'#D4B678','--on-cta':'#1A2B49','--glow':'rgba(179,146,80,.16)','--nav':'rgba(253,253,253,.93)',
      '--shadow':'0 1px 2px rgba(26,43,73,.06)','--shadow-lg':'0 10px 26px rgba(26,43,73,.12)'}}
 ];
+/* Qué colores puede retocar el usuario, uno por uno, encima de la base elegida */
+const RETOQUES=[
+  {k:'--bg',     n:'Fondo'},
+  {k:'--surface',n:'Tarjetas'},
+  {k:'--text',   n:'Texto'},
+  {k:'--cta',    n:'Color principal'},
+  {k:'--income', n:'Ingresos'},
+  {k:'--expense',n:'Gastos'}
+];
 function applyTheme(id){
   const th=THEMES.find(x=>x.id===id)||THEMES[1];
-  Object.entries(th.t).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
-  document.getElementById('tcolor').setAttribute('content',th.t['--bg']);
+  const base={...th.t};
+  const mios=(DB.cfg&&DB.cfg.colores)||{};
+  /* los retoques del usuario mandan sobre la paleta base */
+  Object.keys(mios).forEach(k=>{if(mios[k])base[k]=mios[k];});
+  /* dos derivados se recalculan para que todo siga combinando */
+  if(mios['--cta']){
+    base['--cta-lt']=aclarar(mios['--cta'],0.3);
+    base['--glow']=conAlfa(mios['--cta'],0.18);
+    base['--on-cta']=claro(mios['--cta'])?'#10131A':'#FFFFFF';
+  }
+  if(mios['--surface'])base['--surface-2']=mezclar(mios['--surface'],base['--text'],0.07);
+  if(mios['--bg'])base['--nav']=conAlfa(mios['--bg'],0.92);
+  Object.entries(base).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
+  const tc=document.getElementById('tcolor');
+  if(tc)tc.setAttribute('content',base['--bg']);
+}
+/* utilidades de color */
+function aHex(c){
+  c=String(c||'').trim();
+  if(/^#[0-9a-f]{6}$/i.test(c))return c;
+  if(/^#[0-9a-f]{3}$/i.test(c))return '#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
+  const m=c.match(/rgba?\(([^)]+)\)/);
+  if(m){const p=m[1].split(',').map(x=>parseFloat(x));
+    return '#'+p.slice(0,3).map(x=>Math.round(x).toString(16).padStart(2,'0')).join('');}
+  return '#000000';
+}
+const rgb=c=>{const h=aHex(c);return [1,3,5].map(i=>parseInt(h.substr(i,2),16));};
+const hex=a=>'#'+a.map(x=>Math.max(0,Math.min(255,Math.round(x))).toString(16).padStart(2,'0')).join('');
+const aclarar=(c,t)=>hex(rgb(c).map(x=>x+(255-x)*t));
+const mezclar=(a,b,t)=>{const x=rgb(a),y=rgb(b);return hex(x.map((v,i)=>v+(y[i]-v)*t));};
+const conAlfa=(c,a)=>{const x=rgb(c);return `rgba(${x[0]},${x[1]},${x[2]},${a})`;};
+const claro=c=>{const x=rgb(c);return (x[0]*299+x[1]*587+x[2]*114)/1000>150;};
+
+/* Selector en dos pasos: primero la cuenta, luego el bolsillo.
+   Evita listas enormes donde todo sale revuelto. */
+function dobleSelector(id,ref,etiqueta){
+  const [aid,pid]=String(ref||'').split(':');
+  const cta=DB.cfg.accounts.find(a=>a.id===aid)||DB.cfg.accounts[0];
+  if(!cta)return '';
+  const bolsillos=[{id:'',n:'Disponible'}].concat(
+    pocketsOrd(cta).map(p=>({id:p.id,n:p.name})));
+  return `<div class="doble">
+    <div class="dcampo">
+      <span>${etiqueta||'Cuenta'}</span>
+      <select data-dob="${id}" data-parte="cuenta">
+        ${DB.cfg.accounts.map(a=>`<option value="${a.id}" ${a.id===cta.id?'selected':''}>${a.name}</option>`).join('')}
+      </select>
+    </div>
+    ${bolsillos.length>1?`<div class="dcampo">
+      <span>Bolsillo</span>
+      <select data-dob="${id}" data-parte="bolsillo">
+        ${bolsillos.map(b=>`<option value="${b.id}" ${b.id===(pid||'')?'selected':''}>${b.n}</option>`).join('')}
+      </select>
+    </div>`:''}
+  </div>`;
+}
+/* arma la referencia a partir de los dos desplegables */
+function refDoble(id){
+  const c=document.querySelector(`[data-dob="${id}"][data-parte="cuenta"]`);
+  const b=document.querySelector(`[data-dob="${id}"][data-parte="bolsillo"]`);
+  if(!c)return null;
+  return c.value+(b&&b.value?':'+b.value:'');
 }
 
 /* ============ persistencia ============ */
@@ -350,8 +419,10 @@ function cardSplit(card){
     if(!c||c.close.getTime()<=now)due.push(m);else next.push(m);
   });
   const sum=a=>a.reduce((s,m)=>s+pend(m),0);
-  const listo=sum(due.filter(m=>m.res))+sum(next.filter(m=>m.res));
-  const falta=sum(due.filter(m=>!m.res))+sum(next.filter(m=>!m.res));
+  /* cuenta lo realmente guardado, que puede ser parcial */
+  const guard=a=>a.reduce((s,m)=>s+Math.min(pend(m),+m.resMonto||(m.res?pend(m):0)),0);
+  const listo=guard(due)+guard(next);
+  const falta=(sum(due)+sum(next))-listo;
   let nextClose=null,nextPay=null;
   if(next.length){const c=cycleOf(card,next[0].ts);nextClose=c.close;nextPay=c.pay;}
   let payBy=null;

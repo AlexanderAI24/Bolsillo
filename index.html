@@ -131,7 +131,7 @@ if('serviceWorker' in navigator){
       <button class="mi" data-go="s-back">
         <span class="mic"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 11l4 4 4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg></span>
         <span class="n">Datos y respaldo</span><span class="ch">›</span></button>
-      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v35</div>
+      <div class="hint" style="padding:14px 0 24px;text-align:center">Bolsillo · v36</div>
     </div>
   </section>
 
@@ -172,6 +172,7 @@ if('serviceWorker' in navigator){
     <div class="set">
       <div id="inb-perm"></div>
       <label>Movimientos detectados</label>
+      <div id="inb-origen"></div>
       <div id="inb-status" class="hint" style="margin-top:0"></div>
       <div id="inb-list"></div>
       <div id="inb-crudo"></div>
@@ -204,7 +205,13 @@ if('serviceWorker' in navigator){
   <section id="v-s-style" style="display:none">
     <button class="back" data-back="set">‹ Ajustes</button>
     <div class="h" style="padding-top:10px"><div class="eyebrow">Estilo visual</div></div>
-    <div class="set"><div class="themes" id="themes"></div><div style="height:24px"></div></div>
+    <div class="set">
+      <label>Paleta base</label>
+      <div class="themes" id="themes"></div>
+      <label>Ajustar a tu gusto</label>
+      <div id="paleta"></div>
+      <div style="height:24px"></div>
+    </div>
   </section>
 
   <section id="v-s-gen" style="display:none">
