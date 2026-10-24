@@ -1,5 +1,7 @@
-const CACHE='bolsillo-v31';
-const FILES=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const CACHE='bolsillo-v35';
+const FILES=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png',
+  './css/app.css','./js/nucleo.js','./js/vistas.js','./js/registro.js',
+  './js/lectura.js','./js/tarjetas.js','./js/app.js'];
 self.addEventListener('install',e=>{
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).catch(()=>{}));
