@@ -265,6 +265,11 @@ $('save').onclick=async()=>{
         ok:'Guardar igual',cancel:'Corregir'});
       if(r.action!=='ok')return;}
   }
+  /* si corregiste la categoría a mano, la app se queda con la palabra clave */
+  if(d.catManual&&m.note&&m.cat){
+    const p=aprenderPalabra(m.note,m.cat,d.pista);
+    if(p)setTimeout(()=>toast('Aprendí: "'+p+'" es '+m.cat),1200);
+  }
   if(!prev)DB.mov.push(m);
   else{
     /* si la compra tenia plata apartada, el traslado se ajusta al nuevo monto */

@@ -109,7 +109,9 @@ function syncPay(){
             !m.res?'Sin guardar'
             :(resDe(m)<pend(m)-0.009?'◐ '+money(resDe(m))+' guardados'
             :'✓ En bolsillo')}</button></div>
-          <div class="ba num">${money(pend(m))}</div>
+          <div class="ba num">${money(Math.max(0,pend(m)-resDe(m)))}
+            ${((m.paidAmt||0)>0.009||resDe(m)>0.009)
+              ?`<i>de ${money(m.amount)}</i>`:''}</div>
         </div>
         ${marcada?`<div class="abono">
           <span>Abonar</span>

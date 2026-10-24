@@ -260,6 +260,8 @@ document.addEventListener('input',e=>{
     return;
   }
   let raw=el.dataset.raw;
+  /* venia todo seleccionado: lo que escribas arranca de cero */
+  if(el.dataset.limpiar==='1'){raw='';delete el.dataset.limpiar;}
   const it=e.inputType||'';
   if(it.indexOf('delete')===0)raw=raw.slice(0,-1);
   else if(e.data){
@@ -292,7 +294,13 @@ function modal(o){
         ${o.alt?`<button data-r="alt">${o.alt}</button>`:''}
         <button data-r="cancel">${o.cancel||'Cancelar'}</button></div>`;
     $('modal').classList.add('on');
-    const inp=$('minput');if(inp)setTimeout(()=>{inp.focus();inp.select();},80);
+    const inp=$('minput');
+    if(inp)setTimeout(()=>{
+      inp.dataset.raw=rawFromField(inp.value);
+      inp.dataset.limpiar='1';     /* la primera tecla reemplaza todo */
+      inp.focus();
+      try{inp.setSelectionRange(0,inp.value.length);}catch(_){}
+    },80);
     box.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{
       const v=inp?clean(inp.value):null;
       $('modal').classList.remove('on');

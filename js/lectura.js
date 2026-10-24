@@ -41,7 +41,8 @@ const VOCAB=[
                     'carulla','olimpica','olímpica','euro','makro','justo','zapatoca','colsubsidio',
                     'surtimax','consumo','granero','fruver','verdura','carniceria','carnicería','huevos',
                     'canasta','despensa','abarrotes','la vaquita','mercar']],
- ['Restaurante',   ['restaurante','almuerzo','almorzar','cena','cenar','desayuno','comida en','comimos',
+ ['Restaurante',   ['paleta','paletas','helado','mecato','dulces','chocolate','galletas','snack',
+                    'antojito','onces','algo de comer','picada','restaurante','almuerzo','almorzar','cena','cenar','desayuno','comida en','comimos',
                     'burger','hamburguesa','pizza','sushi','asado','bandeja','corrientazo','mcdonald',
                     'kfc','frisby','crepes','sandwich','sánduche','empanada','panaderia','panadería',
                     'cafe','café','juan valdez','tostao','starbucks','postre','helado','bar ','cerveza',
@@ -105,22 +106,42 @@ const VOCAB=[
 const VOCAB_IDX=(()=>{const m=new Map();
   VOCAB.forEach(([cat,palabras])=>palabras.forEach(p=>{if(!m.has(p))m.set(p,cat);}));
   return m;})();
+/* "con fulano" o "para fulano" es compañía, no el tema del gasto.
+   Lo que viene después pesa menos que lo que viene antes. */
+const CONECTORES=[' con ',' para ',' a '];
 /* Clasifica por la nota. Devuelve la categoría y qué palabra la disparó. */
 function clasificar(texto,tipo){
   const t=' '+String(texto||'').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ')+' ';
   const validas=(tipo==='in'?CATS.in:CATS.out).map(([n])=>n);
+
+  /* 1) lo que tú ya corregiste antes manda sobre todo */
+  const propias=DB.cfg.palabras||{};
+  let mejorPropia=null,posP=1e9;
+  Object.keys(propias).forEach(p=>{
+    if(!validas.includes(propias[p]))return;
+    const i=t.indexOf(' '+p);
+    if(i>=0&&i<posP){mejorPropia={cat:propias[p],palabra:p,tuya:true};posP=i;}
+  });
+
+  /* donde empieza la parte de "con quién", para restarle peso */
+  let corte=1e9;
+  CONECTORES.forEach(c=>{const i=t.indexOf(c);if(i>=0&&i<corte)corte=i;});
+
   /* gana lo que se menciona primero; si empatan, la palabra más específica */
   let mejor=null,pos=1e9,largo=0;
   for(const [palabra,cat] of VOCAB_IDX){
     if(!validas.includes(cat))continue;
     const p=' '+palabra.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
       .replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ');
-    const i=t.indexOf(p);
+    let i=t.indexOf(p);
     if(i<0)continue;
-    if(i<pos||(i===pos&&palabra.length>largo)){mejor={cat,palabra};pos=i;largo=palabra.length;}
+    /* lo que aparece tras "con" o "para" pasa al final de la fila */
+    const ef=i>corte?i+1000:i;
+    if(ef<pos||(ef===pos&&palabra.length>largo)){mejor={cat,palabra};pos=ef;largo=palabra.length;}
   }
+  if(mejorPropia&&(!mejor||posP<=pos))return mejorPropia;
   return mejor;
 }
 
@@ -232,6 +253,26 @@ function categoriaDe(desc,t){
   const r=(DB.cfg.reglas||{})[k];
   if(r&&r.cat)return r.cat;
   return categoriza(desc,t);
+}
+const RELLENO=new Set(['de','del','la','el','los','las','un','una','en','con','para','por','y',
+ 'a','al','mi','mis','su','sus','que','me','lo','le','se','compra','compre','compré','pago','pague',
+ 'pagué','gasto','gaste','gasté','fui','fuimos','hoy','ayer','esta','este','cosas','cosa','algo']);
+/* Cuando corriges la categoría, la app se queda con la palabra que la define. */
+function aprenderPalabra(nota,cat,pista){
+  if(!cat||cat==='Otro')return null;
+  DB.cfg.palabras=DB.cfg.palabras||{};
+  /* si la app se guió por una palabra y tú la corregiste,
+     esa misma palabra pasa a significar lo que tú dices */
+  if(pista){DB.cfg.palabras[pista]=cat;return pista;}
+  const t=String(nota||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9ñ ]/g,' ').split(/\s+/).filter(Boolean);
+  /* corta en "con"/"para": lo de después suele ser con quién, no qué */
+  const k=t.findIndex(w=>w==='con'||w==='para');
+  const utiles=(k>0?t.slice(0,k):t).filter(w=>w.length>3&&!RELLENO.has(w));
+  if(!utiles.length)return null;
+  const palabra=utiles.sort((a,b)=>b.length-a.length)[0];
+  DB.cfg.palabras[palabra]=cat;
+  return palabra;
 }
 function aprender(desc,cat){
   if(!cat||cat==='Otro')return;
